@@ -149,6 +149,83 @@ export class DiscordBot {
           message.channel.send(`Error initiating mod update check: ${error.message}`);
           console.error('Error during restart command:', error);
         }
+      } else if (command === 'adduser') {
+        // Check if user has admin role
+        if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
+          return message.channel.send('❌ You need the @admin role to use this command.');
+        }
+
+        // Check if the user has provided both username and password
+        if (args.length < 2) {
+          return message.channel.send('❌ Missing arguments! Usage: `!adduser <username> <password>`');
+        }
+
+        const username = args[0];
+        const password = args[1];
+
+        try {
+          // Send the adduser command to the server
+          const response = await rconClient.send(`adduser "${username}" "${password}"`);
+          message.channel.send(`✅ User command executed: ${response || 'Command sent, but no response received.'}`);
+
+          // For security, try to delete the original message that contains the password
+          try {
+            if (message.deletable) {
+              await message.delete();
+              message.channel.send('Original message deleted for security.');
+            }
+          } catch (deleteError) {
+            console.error('Failed to delete message containing password:', deleteError);
+          }
+        } catch (error) {
+          message.channel.send(`❌ Error adding user: ${error.message}`);
+          console.error('Error adding user:', error);
+        }
+      } else if (command === 'removeuserfromwhitelist') {
+        // Check if user has admin role
+        if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
+          return message.channel.send('❌ You need the @admin role to use this command.');
+        }
+
+        // Check if the user has provided a username
+        if (args.length < 1) {
+          return message.channel.send('❌ Missing arguments! Usage: `!removeuserfromwhitelist <username>`');
+        }
+
+        const username = args[0];
+
+        try {
+          // Send the removeuserfromwhitelist command to the server
+          const response = await rconClient.send(`removeuserfromwhitelist "${username}"`);
+          message.channel.send(`✅ User removed from whitelist: ${response || 'Command sent, but no response received.'}`);
+        } catch (error) {
+          message.channel.send(`❌ Error removing user from whitelist: ${error.message}`);
+          console.error('Error removing user from whitelist:', error);
+        }
+      } else if (command === 'help') {
+        // Create an embed for better formatting
+        const prefix = config.discord.prefix;
+
+        // Create a formatted help message
+        let helpMessage = '**🤖 Zona Merah Project Z - Command List 🤖**\n\n';
+
+        // General commands (no role requirements)
+        helpMessage += '**General Commands:**\n';
+        helpMessage += `\`${prefix}help\` - Shows this help message\n`;
+        helpMessage += `\`${prefix}ping\` - Check bot response time\n`;
+        helpMessage += `\`${prefix}players\` - Show currently online players\n`;
+        helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n\n`;
+
+        // Admin commands
+        helpMessage += '**Admin Commands:**\n';
+        helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
+        helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n\n`;
+
+        // Note about server commands
+        helpMessage += '**Note:** Server commands may take a moment to process depending on server load.';
+
+        // Send the help message
+        message.channel.send(helpMessage);
       }
 
       // Add more commands as needed
