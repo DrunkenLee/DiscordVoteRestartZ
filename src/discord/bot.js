@@ -20,13 +20,114 @@ export class DiscordBot {
     this.requiredConfirmations = 3;
     // Cooldown period in milliseconds (1 hour)
     this.restartCooldown = 60 * 60 * 1000;
+
+    // RCON connection management
+    this.rconClient = null;
+    this.rconHeartbeatInterval = null;
+    this.heartbeatIntervalTime = 5 * 60 * 1000; // 5 minutes
+    this.isReconnecting = false;
   }
 
   async login() {
     return this.client.login(this.token);
   }
 
+  setupRconConnection(rconClient) {
+    this.rconClient = rconClient;
+
+    // Setup RCON heartbeat to keep connection alive
+    this.startRconHeartbeat();
+
+    // Return the wrapped rcon client with auto-reconnect
+    return {
+      send: async (command) => {
+        try {
+          return await this.sendRconCommand(command);
+        } catch (error) {
+          console.error(`RCON command failed: ${error.message}`);
+
+          // Try to reconnect and retry the command once
+          if (error.message.includes('WebSocket') || error.message.includes('ECONNRESET') ||
+              error.message.includes('not connected') || error.message.toLowerCase().includes('timeout')) {
+            console.log('Connection issue detected, attempting to reconnect...');
+
+            try {
+              await this.reconnectRcon();
+              console.log('Reconnected to RCON, retrying command...');
+              return await this.sendRconCommand(command);
+            } catch (reconnectError) {
+              throw new Error(`Failed to reconnect to RCON: ${reconnectError.message}`);
+            }
+          }
+
+          throw error;
+        }
+      }
+    };
+  }
+
+  startRconHeartbeat() {
+    // Clear any existing interval
+    if (this.rconHeartbeatInterval) {
+      clearInterval(this.rconHeartbeatInterval);
+    }
+
+    // Set up a new heartbeat interval
+    this.rconHeartbeatInterval = setInterval(async () => {
+      try {
+        console.log('Sending RCON heartbeat...');
+        await this.sendRconCommand('players');
+        console.log('RCON heartbeat successful');
+      } catch (error) {
+        console.error(`RCON heartbeat failed: ${error.message}`);
+        this.reconnectRcon().catch(e => console.error(`Failed to reconnect: ${e.message}`));
+      }
+    }, this.heartbeatIntervalTime);
+
+    console.log(`RCON heartbeat started, interval: ${this.heartbeatIntervalTime / 1000} seconds`);
+  }
+
+  async sendRconCommand(command) {
+    if (!this.rconClient) {
+      throw new Error('RCON client not initialized');
+    }
+
+    return this.rconClient.send(command);
+  }
+
+  async reconnectRcon() {
+    if (this.isReconnecting) {
+      console.log('Reconnection already in progress, skipping...');
+      return;
+    }
+
+    this.isReconnecting = true;
+
+    try {
+      console.log('Attempting to reconnect to RCON server...');
+
+      // This assumes your RCON client has a connect or reconnect method
+      // Adjust this based on your actual RCON client implementation
+      if (typeof this.rconClient.connect === 'function') {
+        await this.rconClient.connect();
+      } else if (typeof this.rconClient.reconnect === 'function') {
+        await this.rconClient.reconnect();
+      } else {
+        // If no explicit reconnect method, you might need to recreate the client
+        // This would require more context on how your RCON client is created
+        throw new Error('No reconnect method available on RCON client');
+      }
+
+      console.log('Successfully reconnected to RCON server');
+    } finally {
+      this.isReconnecting = false;
+    }
+  }
+
   setupEventListeners(rconClient) {
+    // Set up RCON with auto-reconnect wrapper
+    const wrappedRconClient = this.setupRconConnection(rconClient);
+
     this.client.on(Events.MessageCreate, async (message) => {
       // Ignore bot messages
       if (message.author.bot) return;
@@ -48,10 +149,10 @@ export class DiscordBot {
         reply.edit(`Pong! 🏓\nBot Latency: ${pingTime}ms\nAPI Latency: ${Math.round(this.client.ws.ping)}ms`);
       } else if (command === 'players') {
         try {
-          const response = await rconClient.send('players');
+          const response = await wrappedRconClient.send('players');
           message.channel.send(`Players online: ${response || 'None'}`);
         } catch (error) {
-          message.channel.send('Error fetching players list.');
+          message.channel.send(`Error fetching players list: ${error.message}`);
           console.error(error);
         }
       } else if (command === 'restart') {
@@ -71,7 +172,7 @@ export class DiscordBot {
           const statusMessage = await message.channel.send('Checking if mods need updates...');
 
           // Send the mod check command
-          const checkResponse = await rconClient.send('checkModsNeedUpdate');
+          const checkResponse = await wrappedRconClient.send('checkModsNeedUpdate');
           console.log('Mod check response:', checkResponse);
 
           // Response typically indicates the check has started
@@ -117,21 +218,21 @@ export class DiscordBot {
                 await message.channel.send(`Confirmed by ${confirmedUsers.size} users! Initiating server restart sequence...`);
                 try {
                   // First notification to in-game players
-                  await rconClient.send('servermsg "SERVER RESTART: Restart initiated by Discord vote. Server will restart in 2 minutes."');
+                  await wrappedRconClient.send('servermsg "SERVER RESTART: Restart initiated by Discord vote. Server will restart in 2 minutes."');
                   await message.channel.send('In-game notification sent. Waiting 2 minutes before restart...');
 
                   // Wait 2 minutes (120000 ms)
                   await new Promise(resolve => setTimeout(resolve, 120000));
 
                   // Second warning - imminent restart
-                  await rconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting. Please finish what you\'re doing!"');
+                  await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting. Please finish what you\'re doing!"');
                   await message.channel.send('Final warning sent. Restarting server in 10 seconds...');
 
                   // Give players a few more seconds to prepare
                   await new Promise(resolve => setTimeout(resolve, 10000));
 
                   // Execute the restart
-                  await rconClient.send('quit');
+                  await wrappedRconClient.send('quit');
                   await message.channel.send('Server restart command sent successfully.');
 
                   // Update the last restart time for cooldown
@@ -165,7 +266,7 @@ export class DiscordBot {
 
         try {
           // Send the adduser command to the server
-          const response = await rconClient.send(`adduser "${username}" "${password}"`);
+          const response = await wrappedRconClient.send(`adduser "${username}" "${password}"`);
           message.channel.send(`✅ User command executed: ${response || 'Command sent, but no response received.'}`);
 
           // For security, try to delete the original message that contains the password
@@ -196,7 +297,7 @@ export class DiscordBot {
 
         try {
           // Send the removeuserfromwhitelist command to the server
-          const response = await rconClient.send(`removeuserfromwhitelist "${username}"`);
+          const response = await wrappedRconClient.send(`removeuserfromwhitelist "${username}"`);
           message.channel.send(`✅ User removed from whitelist: ${response || 'Command sent, but no response received.'}`);
         } catch (error) {
           message.channel.send(`❌ Error removing user from whitelist: ${error.message}`);
@@ -234,5 +335,13 @@ export class DiscordBot {
     this.client.once(Events.ClientReady, () => {
       console.log(`Bot is ready! Logged in as ${this.client.user.tag}`);
     });
+  }
+
+  // Make sure to clean up when the bot is shutting down
+  cleanup() {
+    if (this.rconHeartbeatInterval) {
+      clearInterval(this.rconHeartbeatInterval);
+      this.rconHeartbeatInterval = null;
+    }
   }
 }
