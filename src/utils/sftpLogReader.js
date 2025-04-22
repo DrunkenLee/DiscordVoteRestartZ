@@ -44,7 +44,7 @@ export class SftpLogReader {
     await this.connect();
 
     // Path to Project Zomboid server logs
-    const logDir = '/home/container/.cache/Logs/';
+    const logDir = '/.cache/Logs/';
 
     try {
       // List all files in the directory
@@ -73,9 +73,9 @@ export class SftpLogReader {
       // Read the last 100 lines of the log file
       const logContent = await this.sftp.get(latestLogPath);
 
-      // Split content into lines and get the last 100 lines
+      // Split content into lines and get the last 150 lines
       const lines = logContent.toString().split('\n');
-      const lastLines = lines.slice(-100);
+      const lastLines = lines.slice(-150);
 
       // Look for mod update messages in the recent lines
       for (let i = lastLines.length - 1; i >= 0; i--) {
@@ -88,7 +88,7 @@ export class SftpLogReader {
               needsUpdate: false,
               message: 'Mods are up to date'
             };
-          } else if (line.includes('need to update')) {
+          } else if (line.includes('need to update', 'Mods need update')) {
             return {
               success: true,
               needsUpdate: true,

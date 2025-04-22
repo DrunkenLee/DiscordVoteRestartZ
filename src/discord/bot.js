@@ -17,7 +17,7 @@ export class DiscordBot {
     // Track the last restart time for cooldown
     this.lastRestartTime = null;
     // Required number of confirmations
-    this.requiredConfirmations = 3;
+    this.requiredConfirmations = 5;
     // Cooldown period in milliseconds (1 hour)
     this.restartCooldown = 60 * 60 * 1000;
 
@@ -157,6 +157,10 @@ export class DiscordBot {
         }
       } else if (command === 'restart') {
         try {
+          // Set 4 hours cooldown (in ms)
+          this.restartCooldown = 4 * 60 * 60 * 1000;
+          this.requiredConfirmations = 5;
+
           // Check cooldown period
           if (this.lastRestartTime) {
             const timeSinceLastRestart = Date.now() - this.lastRestartTime;
@@ -169,47 +173,47 @@ export class DiscordBot {
             }
           }
 
-          const statusMessage = await message.channel.send('Checking if mods need updates...');
-
-          // Send the mod check command
-          const checkResponse = await wrappedRconClient.send('checkModsNeedUpdate');
-          console.log('Mod check response:', checkResponse);
-
-          // Response typically indicates the check has started
-          await statusMessage.edit('Mod check started. Please wait for the server to process the request...');
-
-          // Since we can't directly check logs, we need to implement a different approach
           setTimeout(async () => {
-            // Create a set to track unique users who have confirmed
+            // Track unique users for confirm and cancel
             const confirmedUsers = new Set();
+            const canceledUsers = new Set();
 
-            // Add the command initiator to the tracking message
             const confirmMsg = await message.channel.send(
-              `Do you want to restart the server? **${confirmedUsers.size}/${this.requiredConfirmations}** confirmations received.\n` +
-              `Type \`confirm\` within 60 seconds to confirm the restart.\n` +
-              `**Note:** At least ${this.requiredConfirmations} different users must confirm.`
+              `**Force Restart Requested!**\n` +
+              `This command is for emergency use only. If you want to restart for mod updates, please use \`!checkupdate\` instead.\n\n` +
+              `**${confirmedUsers.size}/5** confirms | **${canceledUsers.size}/1** cancels\n` +
+              `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+              `**Note:** At least 5 different users must confirm, or 1 must cancel.`
             );
 
-            // Create a message collector for confirmations
-            const filter = m => m.content.toLowerCase() === 'confirm';
-            const collector = message.channel.createMessageCollector({ filter, time: 60000 });
+            const filter = m => ['confirm', 'cancel'].includes(m.content.toLowerCase());
+            const collector = message.channel.createMessageCollector({ filter, time: 120000 });
 
             collector.on('collect', async (m) => {
-              // Add the user to the confirmation list if they haven't already confirmed
-              if (!confirmedUsers.has(m.author.id)) {
+              const action = m.content.toLowerCase();
+              if (action === 'confirm' && !confirmedUsers.has(m.author.id)) {
                 confirmedUsers.add(m.author.id);
+              }
+              if (action === 'cancel' && !canceledUsers.has(m.author.id)) {
+                canceledUsers.add(m.author.id);
+              }
 
-                // Update the confirmation message
-                await confirmMsg.edit(
-                  `Do you want to restart the server? **${confirmedUsers.size}/${this.requiredConfirmations}** confirmations received.\n` +
-                  `Type \`confirm\` within 60 seconds to confirm the restart.\n` +
-                  `**Note:** At least ${this.requiredConfirmations} different users must confirm.`
-                );
+              // Update the confirmation message
+              await confirmMsg.edit(
+                `**Force Restart Requested!**\n` +
+                `This command is for emergency use only. If you want to restart for mod updates, please use \`!checkupdate\` instead.\n\n` +
+                `**${confirmedUsers.size}/5** confirms | **${canceledUsers.size}/1** cancels\n` +
+                `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+                `**Note:** At least 5 different users must confirm, or 1 must cancel.`
+              );
 
-                // If we have enough confirmations, restart the server
-                if (confirmedUsers.size >= this.requiredConfirmations) {
-                  collector.stop('confirmed');
-                }
+              // If enough cancels, stop collector and cancel
+              if (canceledUsers.size >= 1) {
+                collector.stop('canceled');
+              }
+              // If enough confirms, stop collector and proceed
+              if (confirmedUsers.size >= 5) {
+                collector.stop('confirmed');
               }
             });
 
@@ -217,38 +221,64 @@ export class DiscordBot {
               if (reason === 'confirmed') {
                 await message.channel.send(`Confirmed by ${confirmedUsers.size} users! Initiating server restart sequence...`);
                 try {
-                  // First notification to in-game players
-                  await wrappedRconClient.send('servermsg "SERVER RESTART: Restart initiated by Discord vote. Server will restart in 2 minutes."');
+                  await wrappedRconClient.send('servermsg "SERVER RESTART: Force restart initiated by Discord vote. Server will restart in 2 minutes."');
                   await message.channel.send('In-game notification sent. Waiting 2 minutes before restart...');
-
-                  // Wait 2 minutes (120000 ms)
                   await new Promise(resolve => setTimeout(resolve, 120000));
-
-                  // Second warning - imminent restart
                   await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting. Please finish what you\'re doing!"');
                   await message.channel.send('Final warning sent. Restarting server in 10 seconds...');
-
-                  // Give players a few more seconds to prepare
                   await new Promise(resolve => setTimeout(resolve, 10000));
-
-                  // Execute the restart
                   await wrappedRconClient.send('quit');
                   await message.channel.send('Server restart command sent successfully.');
-
-                  // Update the last restart time for cooldown
                   this.lastRestartTime = Date.now();
                 } catch (restartError) {
                   await message.channel.send(`Error during restart: ${restartError.message}`);
                   console.error('Restart error:', restartError);
                 }
+              } else if (reason === 'canceled') {
+                await confirmMsg.edit(`Restart canceled. Received ${canceledUsers.size}/1 cancels.`);
+                await message.channel.send('Server restart vote has been canceled by users.');
               } else {
-                await confirmMsg.edit(`Restart canceled. Only ${confirmedUsers.size}/${this.requiredConfirmations} confirmations received.`);
+                await confirmMsg.edit(`Restart not confirmed. Only ${confirmedUsers.size}/5 confirms and ${canceledUsers.size}/1 cancels received.`);
               }
             });
-          }, 10000); // Wait 10 seconds for the check to run before asking
+          }, 1000);
         } catch (error) {
-          message.channel.send(`Error initiating mod update check: ${error.message}`);
+          message.channel.send(`Error initiating force restart: ${error.message}`);
           console.error('Error during restart command:', error);
+        }
+      } else if (command === 'checkupdate') {
+        try {
+          const statusMsg = await message.channel.send('Checking for mod updates, please wait while im reading the log...');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+
+          const result = await this.sftpLogReader.checkForModUpdates();
+          console.log(JSON.stringify(result, null, 2));
+
+          if (result && result.success) {
+            await statusMsg.edit(`Mod update check result: **${result.message}**`);
+            if (result?.needsUpdate) {
+              await message.channel.send('Mod update detected! Restarting server immediately...');
+              try {
+                await wrappedRconClient.send('servermsg "SERVER RESTART: Restart initiated due to mod update. Server will restart in 2 minutes."');
+                await message.channel.send('In-game notification sent. Waiting 2 minutes before restart...');
+                await new Promise(resolve => setTimeout(resolve, 120000));
+                await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting. Please finish what you\'re doing!"');
+                await message.channel.send('Final warning sent. Restarting server in 10 seconds...');
+                await new Promise(resolve => setTimeout(resolve, 10000));
+                await wrappedRconClient.send('quit');
+                await message.channel.send('Server restart command sent successfully.');
+                this.lastRestartTime = Date.now();
+              } catch (restartError) {
+                await message.channel.send(`Error during restart: ${restartError.message}`);
+                console.error('Restart error:', restartError);
+              }
+            }
+          } else {
+            await statusMsg.edit(`Mod update check result: **${result.message || 'Unknown error'}**`);
+          }
+        } catch (err) {
+          message.channel.send(`Error checking mod updates: ${err.message}`);
+          console.error('Error in !checkupdate:', err);
         }
       } else if (command === 'adduser') {
         // Check if user has admin role
@@ -315,7 +345,8 @@ export class DiscordBot {
         helpMessage += `\`${prefix}help\` - Shows this help message\n`;
         helpMessage += `\`${prefix}ping\` - Check bot response time\n`;
         helpMessage += `\`${prefix}players\` - Show currently online players\n`;
-        helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n\n`;
+        helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
+        helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n\n`;
 
         // Admin commands
         helpMessage += '**Admin Commands:**\n';
