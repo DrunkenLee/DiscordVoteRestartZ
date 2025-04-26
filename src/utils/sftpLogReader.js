@@ -42,59 +42,37 @@ export class SftpLogReader {
 
   async findLatestLogFile() {
     await this.connect();
-
-    // Path to Project Zomboid server logs
-    const logDir = '/.cache/Logs/';
-
-    try {
-      // List all files in the directory
-      const files = await this.sftp.list(logDir);
-
-      // Filter for DebugLog-server files and find the most recent one
-      const serverLogs = files
-        .filter(file => file.name.includes('DebugLog-server') && file.type === '-')
-        .sort((a, b) => b.modifyTime - a.modifyTime);
-
-      if (serverLogs.length === 0) {
-        throw new Error('No server log files found');
-      }
-
-      return `${logDir}${serverLogs[0].name}`;
-    } catch (error) {
-      console.error('Error finding log files:', error);
-      throw error;
-    }
+    // Directly return the known log file path
+    return '/.cache/server-console.txt';
   }
 
   async checkForModUpdates() {
     try {
-      const latestLogPath = await this.findLatestLogFile();
+      const logPath = await this.findLatestLogFile();
 
-      // Read the last 100 lines of the log file
-      const logContent = await this.sftp.get(latestLogPath);
+      // Read the log file
+      const logContent = await this.sftp.get(logPath);
 
-      // Split content into lines and get the last 150 lines
+      // Split content into lines and get the last 50 lines
       const lines = logContent.toString().split('\n');
-      const lastLines = lines.slice(-50);
+      const lastLines = lines.slice(-200);
 
       // Look for mod update messages in the recent lines
       for (let i = lastLines.length - 1; i >= 0; i--) {
         const line = lastLines[i];
-
-        if (line.includes('CheckModsNeedUpdate')) {
-          if (line.includes('Mods updated')) {
-            return {
-              success: true,
-              needsUpdate: false,
-              message: 'Mods are up to date'
-            };
-          } else if (line.includes('Mods need update')) {
-            return {
-              success: true,
-              needsUpdate: true,
-              message: 'Mods need updates'
-            };
-          }
+        console.log({ line });
+        if (line.includes('CheckModsNeedUpdate: Mods updated')) {
+          return {
+            success: true,
+            needsUpdate: false,
+            message: 'Mods are up to date',
+          };
+        } else if (line.includes('Mods need update')) {
+          return {
+            success: true,
+            needsUpdate: true,
+            message: 'Mods need updates',
+          };
         }
       }
 
