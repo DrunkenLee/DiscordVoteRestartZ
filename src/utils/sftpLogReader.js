@@ -75,7 +75,7 @@ export class SftpLogReader {
 
       // Split content into lines and get the last 150 lines
       const lines = logContent.toString().split('\n');
-      const lastLines = lines.slice(-150);
+      const lastLines = lines.slice(-50);
 
       // Look for mod update messages in the recent lines
       for (let i = lastLines.length - 1; i >= 0; i--) {
@@ -88,7 +88,7 @@ export class SftpLogReader {
               needsUpdate: false,
               message: 'Mods are up to date'
             };
-          } else if (line.includes('need to update', 'Mods need update')) {
+          } else if (line.includes('Mods need update')) {
             return {
               success: true,
               needsUpdate: true,

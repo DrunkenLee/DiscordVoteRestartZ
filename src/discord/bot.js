@@ -250,6 +250,9 @@ export class DiscordBot {
         try {
           const statusMsg = await message.channel.send('Checking for mod updates, please wait while im reading the log...');
           await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
 
           const result = await this.sftpLogReader.checkForModUpdates();
           console.log(JSON.stringify(result, null, 2));
