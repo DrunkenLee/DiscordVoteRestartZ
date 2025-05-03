@@ -55,7 +55,7 @@ export class SftpLogReader {
 
       // Split content into lines and get the last 50 lines
       const lines = logContent.toString().split('\n');
-      const lastLines = lines.slice(-200);
+      const lastLines = lines.slice(-5000);
 
       // Look for mod update messages in the recent lines
       for (let i = lastLines.length - 1; i >= 0; i--) {
