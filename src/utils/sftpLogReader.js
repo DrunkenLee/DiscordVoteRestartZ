@@ -91,4 +91,34 @@ export class SftpLogReader {
       await this.disconnect();
     }
   }
+
+  async getKillBoard() {
+    try {
+      await this.connect();
+      const iniPath = '/.cache/Lua/ZonaMerah_KillCounts.ini';
+      const iniContent = await this.sftp.get(iniPath);
+      const lines = iniContent.toString().split('\n');
+      const killCounts = [];
+      let inSection = false;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('[KillCounts]')) {
+          inSection = true;
+          continue;
+        }
+        if (inSection && trimmed && !trimmed.startsWith(';') && trimmed.includes('=')) {
+          const [name, kills] = trimmed.split('=');
+          killCounts.push({ name: name.trim(), kills: parseInt(kills.trim(), 10) || 0 });
+        }
+      }
+      // Sort descending and take top 10
+      killCounts.sort((a, b) => b.kills - a.kills);
+      return killCounts.slice(0, 10);
+    } catch (error) {
+      console.error('Error reading killboard:', error);
+      return [];
+    } finally {
+      await this.disconnect();
+    }
+  }
 }

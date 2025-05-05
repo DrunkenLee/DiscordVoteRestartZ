@@ -26,6 +26,10 @@ export class DiscordBot {
     this.rconHeartbeatInterval = null;
     this.heartbeatIntervalTime = 5 * 60 * 1000; // 5 minutes
     this.isReconnecting = false;
+
+    // Add this for cooldown tracking
+    this.commandCooldowns = new Map();
+    this.cooldownTime = 2 * 60 * 1000; // 2 minutes in ms
   }
 
   async login() {
@@ -139,6 +143,21 @@ export class DiscordBot {
 
       const args = message.content.slice(prefix.length).trim().split(/ +/);
       const command = args.shift().toLowerCase();
+
+      // --- Cooldown check ---
+      const isAdmin = message.member && message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin');
+      const now = Date.now();
+      const cooldownKey = `${message.author.id}:${command}`;
+      if (!isAdmin) { // Admins are immune to cooldown
+        if (this.commandCooldowns.has(cooldownKey)) {
+          const lastUsed = this.commandCooldowns.get(cooldownKey);
+          if (now - lastUsed < this.cooldownTime) {
+            const remaining = Math.ceil((this.cooldownTime - (now - lastUsed)) / 1000);
+            return message.reply(`⏳ Please wait ${remaining} seconds before using \`${prefix}${command}\` again.`);
+          }
+        }
+        this.commandCooldowns.set(cooldownKey, now);
+      }
 
       // Handle commands
       if (command === 'ping') {
@@ -287,6 +306,25 @@ export class DiscordBot {
           message.channel.send(`Error checking mod updates: ${err.message}`);
           console.error('Error in !checkupdate:', err);
         }
+      } else if (command === 'killboard') {
+        try {
+          const statusMsg = await message.channel.send('Fetching killboard, please wait...');
+          const result = await this.sftpLogReader.getKillBoard();
+          if (result && result.length > 0) {
+            let reply = '**🏆 Top 10 Killboard 🏆**\n\n```';
+            result.forEach((entry, idx) => {
+              reply += `\n${idx + 1}. ${entry.name} — ${entry.kills} kills`;
+            });
+            reply += '\n```';
+            reply += '*Note: This records is not real time data. and counted from last CC Defense Event*';
+            await statusMsg.edit(reply);
+          } else {
+            await statusMsg.edit('No kill data found.');
+          }
+        } catch (err) {
+          message.channel.send(`Error fetching killboard: ${err.message}`);
+          console.error('Error in !killboard:', err);
+        }
       } else if (command === 'adduser') {
         // Check if user has admin role
         if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
@@ -353,7 +391,8 @@ export class DiscordBot {
         helpMessage += `\`${prefix}ping\` - Check bot response time\n`;
         helpMessage += `\`${prefix}players\` - Show currently online players\n`;
         helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
-        helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n\n`;
+        helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
+        helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n\n`;
 
         // Admin commands
         helpMessage += '**Admin Commands:**\n';
