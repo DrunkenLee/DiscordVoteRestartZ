@@ -26,6 +26,10 @@ const config = {
     username: process.env.SFTP_USERNAME || "",
     password: process.env.SFTP_PASSWORD || ""
   },
+  battlemetrics: {
+    apiKey: process.env.BATTLEMETRICS_API_KEY || "",
+    serverId: process.env.BATTLEMETRICS_SERVER_ID || ""
+  },
   logging: {
     level: process.env.LOG_LEVEL || "info"
   },

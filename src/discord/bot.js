@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits, Events } from 'discord.js';
+import { BattleMetricsAPI } from '../utils/battlemetrics.js';
 import config from '../config/config.js';
 import { SftpLogReader } from '../utils/sftpLogReader.js';
 
@@ -12,6 +13,11 @@ export class DiscordBot {
         GatewayIntentBits.MessageContent
       ]
     });
+
+    this.battlemetrics = new BattleMetricsAPI(
+      config.battlemetrics.apiKey,
+      config.battlemetrics.serverId
+    );
     this.sftpLogReader = new SftpLogReader();
 
     // Track the last restart time for cooldown
@@ -378,6 +384,28 @@ export class DiscordBot {
           message.channel.send(`❌ Error removing user from whitelist: ${error.message}`);
           console.error('Error removing user from whitelist:', error);
         }
+      } else if (command === 'topplaytime') {
+        try {
+          const statusMsg = await message.channel.send('Fetching top players by playtime from BattleMetrics...');
+          const players = await this.battlemetrics.getTopPlayersByPlaytime(10);
+          if (players && players.length > 0) {
+            let reply = '**⏱️ Top 10 Players by Playtime (BattleMetrics)**\n\n```';
+            players.forEach((player, idx) => {
+              // Convert seconds to hours:minutes
+              const hours = Math.floor(player.time / 3600);
+              const minutes = Math.floor((player.time % 3600) / 60);
+              reply += `\n${idx + 1}. ${player.name} — ${hours}h ${minutes}m`;
+            });
+            reply += '\n```';
+            reply += '\nNotes: *This Data is taken from BattleMetrics, and may not be real time data.*';
+            await statusMsg.edit(reply);
+          } else {
+            await statusMsg.edit('No playtime data found.');
+          }
+        } catch (err) {
+          message.channel.send(`Error fetching playtime data: ${err.message}`);
+          console.error('Error in !topplaytime:', err);
+        }
       } else if (command === 'help') {
         // Create an embed for better formatting
         const prefix = config.discord.prefix;
@@ -392,8 +420,9 @@ export class DiscordBot {
         helpMessage += `\`${prefix}players\` - Show currently online players\n`;
         helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
         helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
-        helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n\n`;
-
+        helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
+        helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n\n`;
+        helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`; // <-- Add this line
         // Admin commands
         helpMessage += '**Admin Commands:**\n';
         helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
@@ -404,6 +433,32 @@ export class DiscordBot {
 
         // Send the help message
         message.channel.send(helpMessage);
+      } else if (command === 'serverinfo') {
+        try {
+          const statusMsg = await message.channel.send('Fetching server info from BattleMetrics...');
+          const url = `https://api.battlemetrics.com/servers/${config.battlemetrics.serverId}`;
+          const headers = config.battlemetrics.apiKey
+            ? { Authorization: `Bearer ${config.battlemetrics.apiKey}` }
+            : {};
+          const res = await fetch(url, { headers });
+          if (!res.ok) throw new Error(`BattleMetrics API error: ${res.statusText}`);
+          const data = await res.json();
+          const attr = data.data.attributes;
+          const details = attr.details || {};
+
+          let reply = `**🖥️ Server Info**\n\n`;
+          reply += `**Name:** ${attr.name}\n`;
+          reply += `**IP:** ${attr.ip}\n`;
+          reply += `**Port:** ${attr.port}\n`;
+          reply += `**Status:** ${attr.status}\n`;
+          reply += `**Open:** ${details.zomboid_open ? 'Yes' : 'No'}\n`;
+          reply += `**Version:** ${details.version || 'Unknown'}\n`;
+
+          await statusMsg.edit(reply);
+        } catch (err) {
+          message.channel.send(`Error fetching server info: ${err.message}`);
+          console.error('Error in !serverinfo:', err);
+        }
       }
 
       // Add more commands as needed
