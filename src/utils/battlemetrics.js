@@ -1,21 +1,17 @@
-// import fetch from 'node-fetch';
+import config from '../config/config.js';
 
 export class BattleMetricsAPI {
-  constructor(apiKey, serverId) {
+  constructor(apiKey = config.battlemetrics.apiKey, serverId = config.battlemetrics.serverId) {
     this.apiKey = apiKey;
     this.serverId = serverId;
     this.baseUrl = 'https://api.battlemetrics.com';
   }
 
   async getTopPlayersByPlaytime(limit = 10) {
-    const headers = this.apiKey
-      ? { Authorization: `Bearer ${this.apiKey}` }
-      : {};
+    // Build the URL with the access_token from config/env
+    const url = `${this.baseUrl}/servers/${this.serverId}/relationships/leaderboards/time?version=%5E0.1.0&filter%5Bperiod%5D=2025-04-07T00%3A00%3A00.000Z%3A2025-05-07T00%3A00%3A00.000Z&access_token=${this.apiKey}&page[size]=${limit}`;
 
-    // Use your working leaderboard URL here, or build it dynamically
-    const url = `${this.baseUrl}/servers/${this.serverId}/relationships/leaderboards/time?filter[period]=2025-04-06T00:00:00.000Z:2025-05-06T00:00:00.000Z&page[size]=${limit}`;
-
-    const res = await fetch(url, { headers });
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`BattleMetrics API error: ${res.statusText}`);
     const data = await res.json();
 
