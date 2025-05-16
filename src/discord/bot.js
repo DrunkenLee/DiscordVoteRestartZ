@@ -26,7 +26,7 @@ export class DiscordBot {
     // Track the last restart time for cooldown
     this.lastRestartTime = null;
     // Required number of confirmations
-    this.requiredConfirmations = 1;
+    this.requiredConfirmations = 5;
     // Cooldown period in milliseconds (1 hour)
     this.restartCooldown = 60 * 60 * 1000;
 
@@ -187,7 +187,7 @@ export class DiscordBot {
         try {
           // Set 4 hours cooldown (in ms)
           this.restartCooldown = 4 * 60 * 60 * 1000;
-          this.requiredConfirmations = 1;
+          this.requiredConfirmations = 5;
 
           // Check cooldown period
           if (this.lastRestartTime) {
@@ -240,7 +240,7 @@ export class DiscordBot {
                 collector.stop('canceled');
               }
               // If enough confirms, stop collector and proceed
-              if (confirmedUsers.size >= 1) {
+              if (confirmedUsers.size >= 5) {
                 collector.stop('confirmed');
               }
             });
