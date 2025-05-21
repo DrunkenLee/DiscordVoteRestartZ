@@ -465,19 +465,10 @@ export class DiscordBot {
         }
       } else if (command === 'checkdeposit' || command === 'checkraiddeposit') {
 
-        const depositCooldown = 3 * 60 * 1000;
-        const depositCooldownKey = `${message.author.id}:${command}`;
-        const now = Date.now();
-        if (this.commandCooldowns.has(depositCooldownKey)) {
-          const lastUsed = this.commandCooldowns.get(depositCooldownKey);
-          if (now - lastUsed < depositCooldown) {
-            const remaining = Math.ceil((depositCooldown - (now - lastUsed)) / 1000);
-            return message.reply(`⏳ Please wait ${remaining} seconds before using \`${config.discord.prefix}${command}\` again.`);
-          }
-        }
-        this.commandCooldowns.set(depositCooldownKey, now);
+        // Remove cooldown for checkdeposit and checkraiddeposit
 
-        const username = message.member?.displayName || message.author.username;
+        // If no username argument, use the requester's Discord username
+        const username = message.member?.displayName || message.author.username
         try {
           await message.react('📩');
           if (command === 'checkdeposit') {
