@@ -421,9 +421,12 @@ export class DiscordBot {
         helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
         helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
         helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
-        helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n\n`;
-        helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`; // <-- Add this line
-        // Admin commands
+        helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n`;
+        helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`;
+        helpMessage += '**S3 Wallet Commands:**\n';
+        helpMessage += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
+        helpMessage += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
+
         helpMessage += '**Admin Commands:**\n';
         helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
         helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n\n`;
@@ -453,11 +456,46 @@ export class DiscordBot {
           reply += `**Status:** ${attr.status}\n`;
           reply += `**Open:** ${details.zomboid_open ? 'Yes' : 'No'}\n`;
           reply += `**Version:** ${details.version || 'Unknown'}\n`;
+          reply += `**Discord Inv Link:** discord.gg/zonamerah\n`;
 
           await statusMsg.edit(reply);
         } catch (err) {
           message.channel.send(`Error fetching server info: ${err.message}`);
           console.error('Error in !serverinfo:', err);
+        }
+      } else if (command === 'checkdeposit' || command === 'checkraiddeposit') {
+
+        const depositCooldown = 3 * 60 * 1000;
+        const depositCooldownKey = `${message.author.id}:${command}`;
+        const now = Date.now();
+        if (this.commandCooldowns.has(depositCooldownKey)) {
+          const lastUsed = this.commandCooldowns.get(depositCooldownKey);
+          if (now - lastUsed < depositCooldown) {
+            const remaining = Math.ceil((depositCooldown - (now - lastUsed)) / 1000);
+            return message.reply(`⏳ Please wait ${remaining} seconds before using \`${config.discord.prefix}${command}\` again.`);
+          }
+        }
+        this.commandCooldowns.set(depositCooldownKey, now);
+
+        const username = message.member?.displayName || message.author.username;
+        try {
+          await message.react('📩');
+          if (command === 'checkdeposit') {
+            await message.channel.send(`Checking deposit for **${username}**, ill send you a DM, please use display name as your in-game name`);
+            const total = await this.sftpLogReader.getServerPointDepositByUsername(username);
+            await message.author.send(`💰 **${username}** has deposited a total of **${total.toLocaleString()}** points.`);
+          } else {
+            await message.channel.send(`Checking raid deposit for **${username}**, ill send you a DM, please use display name as your in-game name`);
+            const total = await this.sftpLogReader.getRaidPointsDepositByUsername(username);
+            await message.author.send(`🪓 **${username}** has deposited a total of **${total.toLocaleString()}** raid points.`);
+          }
+        } catch (err) {
+          try {
+            await message.author.send(`Error checking ${command === 'checkdeposit' ? 'deposit' : 'raid deposit'}: ${err.message}`);
+          } catch {
+            message.channel.send('❌ Unable to send you a DM. Please check your privacy settings.');
+          }
+          console.error(`Error in !${command}:`, err);
         }
       }
 

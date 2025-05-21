@@ -121,4 +121,54 @@ export class SftpLogReader {
       await this.disconnect();
     }
   }
+
+  async getServerPointDepositByUsername(username) {
+    try {
+      await this.connect();
+      const iniPath = `/.cache/Lua/Deposits/${username}_deposits.ini`;
+      const iniContent = await this.sftp.get(iniPath);
+      const lines = iniContent.toString().split('\n');
+      let total = 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('Amount=')) {
+          const amount = parseInt(trimmed.split('=')[1], 10);
+          if (!isNaN(amount)) {
+            total += amount;
+          }
+        }
+      }
+      return total;
+    } catch (error) {
+      console.error('Error reading file:', error);
+      return 0;
+    } finally {
+      await this.disconnect();
+    }
+  }
+
+  async getRaidPointsDepositByUsername(username) {
+    try {
+      await this.connect();
+      const iniPath = `/.cache/Lua/RaidDeposits/${username}_raiddeposits.ini`;
+      const iniContent = await this.sftp.get(iniPath);
+      const lines = iniContent.toString().split('\n');
+      let total = 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('Amount=')) {
+          const amount = parseInt(trimmed.split('=')[1], 10);
+          if (!isNaN(amount)) {
+            total += amount;
+          }
+        }
+      }
+      return total;
+    } catch (error) {
+      console.error('Error reading file:', error);
+      return 0;
+    } finally {
+      await this.disconnect();
+    }
+  }
 }
