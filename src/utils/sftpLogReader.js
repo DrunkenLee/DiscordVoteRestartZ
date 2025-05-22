@@ -43,7 +43,7 @@ export class SftpLogReader {
   async findLatestLogFile() {
     await this.connect();
     // Directly return the known log file path
-    return '/.cache/server-console.txt';
+    return '/home/ubuntu/Zomboid/server-console.txt';
   }
 
   async checkForModUpdates() {
@@ -95,7 +95,7 @@ export class SftpLogReader {
   async getKillBoard() {
     try {
       await this.connect();
-      const iniPath = '/.cache/Lua/ZonaMerah_KillCounts.ini';
+      const iniPath = '/home/ubuntu/Zomboid/Lua/ZonaMerah_KillCounts.ini';
       const iniContent = await this.sftp.get(iniPath);
       const lines = iniContent.toString().split('\n');
       const killCounts = [];
@@ -117,6 +117,56 @@ export class SftpLogReader {
     } catch (error) {
       console.error('Error reading killboard:', error);
       return [];
+    } finally {
+      await this.disconnect();
+    }
+  }
+
+  async getServerPointDepositByUsername(username) {
+    try {
+      await this.connect();
+      const iniPath = `/home/ubuntu/Zomboid/Lua/Deposits/${username}_deposits.ini`;
+      const iniContent = await this.sftp.get(iniPath);
+      const lines = iniContent.toString().split('\n');
+      let total = 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('Amount=')) {
+          const amount = parseInt(trimmed.split('=')[1], 10);
+          if (!isNaN(amount)) {
+            total += amount;
+          }
+        }
+      }
+      return total;
+    } catch (error) {
+      console.error('Error reading file:', error);
+      return 0;
+    } finally {
+      await this.disconnect();
+    }
+  }
+
+  async getRaidPointsDepositByUsername(username) {
+    try {
+      await this.connect();
+      const iniPath = `/home/ubuntu/Zomboid/Lua/RaidDeposits/${username}_raiddeposits.ini`;
+      const iniContent = await this.sftp.get(iniPath);
+      const lines = iniContent.toString().split('\n');
+      let total = 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('Amount=')) {
+          const amount = parseInt(trimmed.split('=')[1], 10);
+          if (!isNaN(amount)) {
+            total += amount;
+          }
+        }
+      }
+      return total;
+    } catch (error) {
+      console.error('Error reading file:', error);
+      return 0;
     } finally {
       await this.disconnect();
     }

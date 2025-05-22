@@ -292,10 +292,271 @@ export class DiscordBot {
             });
           }, 1000); // 1 second delay before starting the confirmation process
         } catch (error) {
-          message.channel.send(`Error initiating restart: ${error.message}`);
-          console.error('Restart command error:', error);
+          message.channel.send(`Error initiating force restart: ${error.message}`);
+          console.error('Error during restart command:', error);
+        }
+      } else if (command === 'checkupdate') {
+        try {
+          const statusMsg = await message.channel.send('Checking for mod updates, please wait while im reading the log...');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+
+          const result = await this.sftpLogReader.checkForModUpdates();
+          // console.log(JSON.stringify(result, null, 2));
+
+          if (result && result.success) {
+            await statusMsg.edit(`Mod update check result: **${result.message}**`);
+            if (result?.needsUpdate) {
+              await message.channel.send('Mod update detected! Restarting server...');
+              try {
+                // First warning via RCON
+                await wrappedRconClient.send('servermsg "SERVER RESTART: Restart initiated due to mod update. Server will restart in 3 minutes."');
+                await message.channel.send('In-game notification sent. Waiting 2 minutes before next warning...');
+
+                // Wait 2 minutes
+                await new Promise(resolve => setTimeout(resolve, 120000));
+
+                // Second warning via RCON
+                await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"');
+                await message.channel.send('Final warning sent. Restarting server in 1 minute...');
+
+                // Wait 1 more minute, then restart via SSH
+                setTimeout(async () => {
+                  const sshConfig = {
+                    host: process.env.OVH_SG_HOST,
+                    port: process.env.OVH_SG_PORT_SSH,
+                    username: process.env.OVH_SG_USERNAME,
+                    password: process.env.OVH_SG_PASSWORD,
+                  };
+                  const conn = new SSHClient();
+                  await new Promise((resolve, reject) => {
+                    conn.on('ready', () => {
+                      conn.exec('./pzserver restart', (err, stream) => {
+                        if (err) {
+                          conn.end();
+                          return reject(err);
+                        }
+                        stream.on('close', () => {
+                          conn.end();
+                          resolve();
+                        });
+                        stream.on('data', () => {});
+                        stream.stderr.on('data', () => {});
+                      });
+                    }).on('error', reject).connect(sshConfig);
+                  });
+                  await message.channel.send('Server restart command sent via SSH. Server will restart now.');
+                  this.lastRestartTime = Date.now();
+                }, 60000); // 1 minute
+              } catch (restartError) {
+                await message.channel.send(`Error during restart: ${restartError.message}`);
+                console.error('Restart error:', restartError);
+              }
+            }
+          } else {
+            await statusMsg.edit(`Mod update check result: **${result.message || 'Unknown error'}**`);
+          }
+        } catch (err) {
+          message.channel.send(`Error checking mod updates: ${err.message}`);
+          console.error('Error in !checkupdate:', err);
+        }
+      } else if (command === 'killboard') {
+        try {
+          const statusMsg = await message.channel.send('Fetching killboard, please wait...');
+          const result = await this.sftpLogReader.getKillBoard();
+          if (result && result.length > 0) {
+            let reply = '**🏆 Top 10 Melee Killboard 🏆**\n\n```';
+            result.forEach((entry, idx) => {
+              reply += `\n${idx + 1}. ${entry.name} — ${entry.kills} kills`;
+            });
+            reply += '\n```';
+            reply += '*Note: This records is not real time data.*';
+            await statusMsg.edit(reply);
+          } else {
+            await statusMsg.edit('No kill data found.');
+          }
+        } catch (err) {
+          message.channel.send(`Error fetching killboard: ${err.message}`);
+          console.error('Error in !killboard:', err);
+        }
+      } else if (command === 'adduser') {
+        // Check if user has admin role
+        if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
+          return message.channel.send('❌ You need the @admin role to use this command.');
+        }
+
+        // Check if the user has provided both username and password
+        if (args.length < 2) {
+          return message.channel.send('❌ Missing arguments! Usage: `!adduser <username> <password>`');
+        }
+
+        const username = args[0];
+        const password = args[1];
+
+        try {
+          // Send the adduser command to the server
+          const response = await wrappedRconClient.send(`adduser "${username}" "${password}"`);
+          message.channel.send(`✅ User command executed: ${response || 'Command sent, but no response received.'}`);
+
+          // For security, try to delete the original message that contains the password
+          try {
+            if (message.deletable) {
+              await message.delete();
+              message.channel.send('Original message deleted for security.');
+            }
+          } catch (deleteError) {
+            console.error('Failed to delete message containing password:', deleteError);
+          }
+        } catch (error) {
+          message.channel.send(`❌ Error adding user: ${error.message}`);
+          console.error('Error adding user:', error);
+        }
+      } else if (command === 'removeuserfromwhitelist') {
+        // Check if user has admin role
+        if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
+          return message.channel.send('❌ You need the @admin role to use this command.');
+        }
+
+        // Check if the user has provided a username
+        if (args.length < 1) {
+          return message.channel.send('❌ Missing arguments! Usage: `!removeuserfromwhitelist <username>`');
+        }
+
+        const username = args[0];
+
+        try {
+          // Send the removeuserfromwhitelist command to the server
+          const response = await wrappedRconClient.send(`removeuserfromwhitelist "${username}"`);
+          message.channel.send(`✅ User removed from whitelist: ${response || 'Command sent, but no response received.'}`);
+        } catch (error) {
+          message.channel.send(`❌ Error removing user from whitelist: ${error.message}`);
+          console.error('Error removing user from whitelist:', error);
+        }
+      } else if (command === 'topplaytime') {
+        try {
+          const statusMsg = await message.channel.send('Fetching top players by playtime from BattleMetrics...');
+          const players = await this.battlemetrics.getTopPlayersByPlaytime(10);
+          if (players && players.length > 0) {
+            let reply = '**⏱️ Top 10 Players by Playtime (BattleMetrics)**\n\n```';
+            players.forEach((player, idx) => {
+              // Convert seconds to hours:minutes
+              const hours = Math.floor(player.time / 3600);
+              const minutes = Math.floor((player.time % 3600) / 60);
+              reply += `\n${idx + 1}. ${player.name} — ${hours}h ${minutes}m`;
+            });
+            reply += '\n```';
+            reply += '\nNotes: *This Data is taken from BattleMetrics, and may not be real time data.*';
+            await statusMsg.edit(reply);
+          } else {
+            await statusMsg.edit('No playtime data found.');
+          }
+        } catch (err) {
+          message.channel.send(`Error fetching playtime data: ${err.message}`);
+          console.error('Error in !topplaytime:', err);
+        }
+      } else if (command === 'help') {
+        // Create an embed for better formatting
+        const prefix = config.discord.prefix;
+
+        // Create a formatted help message
+        let helpMessage = '**🤖 Zona Merah Project Z - Command List 🤖**\n\n';
+
+        // General commands (no role requirements)
+        helpMessage += '**General Commands:**\n';
+        helpMessage += `\`${prefix}help\` - Shows this help message\n`;
+        helpMessage += `\`${prefix}ping\` - Check bot response time\n`;
+        helpMessage += `\`${prefix}players\` - Show currently online players\n`;
+        helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
+        helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
+        helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
+        helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n`;
+        helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`;
+        helpMessage += '**S3 Wallet Commands:**\n';
+        helpMessage += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
+        helpMessage += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
+
+        helpMessage += '**Admin Commands:**\n';
+        helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
+        helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n\n`;
+
+        // Note about server commands
+        helpMessage += '**Note:** Server commands may take a moment to process depending on server load.';
+
+        // Send the help message
+        message.channel.send(helpMessage);
+      } else if (command === 'serverinfo') {
+        try {
+          const statusMsg = await message.channel.send('Fetching server info from BattleMetrics...');
+          const url = `https://api.battlemetrics.com/servers/${config.battlemetrics.serverId}`;
+          const headers = config.battlemetrics.apiKey
+            ? { Authorization: `Bearer ${config.battlemetrics.apiKey}` }
+            : {};
+          const res = await fetch(url, { headers });
+          if (!res.ok) throw new Error(`BattleMetrics API error: ${res.statusText}`);
+          const data = await res.json();
+          const attr = data.data.attributes;
+          const details = attr.details || {};
+
+          let reply = `**🖥️ Server Info**\n\n`;
+          reply += `**Name:** ${attr.name}\n`;
+          reply += `**IP:** ${attr.ip}\n`;
+          reply += `**Port:** ${attr.port}\n`;
+          reply += `**Status:** ${attr.status}\n`;
+          reply += `**Open:** ${details.zomboid_open ? 'Yes' : 'No'}\n`;
+          reply += `**Version:** ${details.version || 'Unknown'}\n`;
+          reply += `**Discord Inv Link:** discord.gg/zonamerah\n`;
+
+          await statusMsg.edit(reply);
+        } catch (err) {
+          message.channel.send(`Error fetching server info: ${err.message}`);
+          console.error('Error in !serverinfo:', err);
+        }
+      } else if (command === 'checkdeposit' || command === 'checkraiddeposit') {
+
+        // Remove cooldown for checkdeposit and checkraiddeposit
+
+        // If no username argument, use the requester's Discord username
+        const username = message.member?.displayName || message.author.username
+        try {
+          await message.react('📩');
+          if (command === 'checkdeposit') {
+            await message.channel.send(`Checking deposit for **${username}**, ill send you a DM, please use display name as your in-game name`);
+            const total = await this.sftpLogReader.getServerPointDepositByUsername(username);
+            await message.author.send(`💰 **${username}** has deposited a total of **${total.toLocaleString()}** points.`);
+          } else {
+            await message.channel.send(`Checking raid deposit for **${username}**, ill send you a DM, please use display name as your in-game name`);
+            const total = await this.sftpLogReader.getRaidPointsDepositByUsername(username);
+            await message.author.send(`🪓 **${username}** has deposited a total of **${total.toLocaleString()}** raid points.`);
+          }
+        } catch (err) {
+          try {
+            await message.author.send(`Error checking ${command === 'checkdeposit' ? 'deposit' : 'raid deposit'}: ${err.message}`);
+          } catch {
+            message.channel.send('❌ Unable to send you a DM. Please check your privacy settings.');
+          }
+          console.error(`Error in !${command}:`, err);
         }
       }
+
+      // Add more commands as needed
     });
+
+    this.client.once(Events.ClientReady, () => {
+      console.log(`Bot is ready! Logged in as ${this.client.user.tag}`);
+    });
+  }
+
+  // Make sure to clean up when the bot is shutting down
+  cleanup() {
+    if (this.rconHeartbeatInterval) {
+      clearInterval(this.rconHeartbeatInterval);
+      this.rconHeartbeatInterval = null;
+    }
   }
 }
