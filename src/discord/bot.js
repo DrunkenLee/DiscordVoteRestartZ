@@ -408,6 +408,26 @@ export class DiscordBot {
           message.channel.send(`Error fetching killboard: ${err.message}`);
           console.error('Error in !killboard:', err);
         }
+      } else if (command === 'killboardrc') {
+        try {
+          const statusMsg = await message.channel.send('Fetching RavenCreek killboard, please wait...');
+          // Use a different filename for RavenCreek killboard
+          const result = await this.sftpLogReader.getKillBoard('ZonaMerah_RavenCreekKillCounts.ini');
+          if (result && result.length > 0) {
+            let reply = '**🏆 RavenCreek Top 10 Killboard 🏆**\n\n```';
+            result.slice(0, 10).forEach((entry, idx) => {
+              reply += `\n${idx + 1}. ${entry.name} — ${entry.kills} kills`;
+            });
+            reply += '\n```';
+            reply += '*Note: This record is not real time data.*';
+            await statusMsg.edit(reply);
+          } else {
+            await statusMsg.edit('No RavenCreek kill data found.');
+          }
+        } catch (err) {
+          message.channel.send(`Error fetching RavenCreek killboard: ${err.message}`);
+          console.error('Error in !rckillboard:', err);
+        }
       } else if (command === 'adduser') {
         // Check if user has admin role
         if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
@@ -517,7 +537,8 @@ export class DiscordBot {
         helpMessage += `\`${prefix}start\` - Start the server (requires confirmations or admin)\n`;
         helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
         helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
-        helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n`;
+        helpMessage += `\`${prefix}killboardrc\` - Display the top 10 killboard (Raven Creek Legend) \n`;
+        helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime - (Under development)\n`;
         helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`;
 
         // Whitelist section
