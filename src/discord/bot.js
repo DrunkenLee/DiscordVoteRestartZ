@@ -504,10 +504,8 @@ export class DiscordBot {
           console.error('Error in !topplaytime:', err);
         }
       } else if (command === 'help') {
-        // Create an embed for better formatting
         const prefix = config.discord.prefix;
 
-        // Create a formatted help message
         let helpMessage = '**🤖 Zona Merah Project Z - Command List 🤖**\n\n';
 
         // General commands (no role requirements)
@@ -516,6 +514,7 @@ export class DiscordBot {
         helpMessage += `\`${prefix}ping\` - Check bot response time\n`;
         helpMessage += `\`${prefix}players\` - Show currently online players\n`;
         helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
+        helpMessage += `\`${prefix}start\` - Start the server (requires confirmations or admin)\n`;
         helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
         helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
         helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n`;
@@ -525,11 +524,13 @@ export class DiscordBot {
         helpMessage += '**Whitelist Commands:**\n';
         helpMessage += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
         helpMessage += `\`${prefix}resetpassword <oldpassword> <newpassword>\` - Reset your whitelist password. You must provide your current password. Your message will be deleted for security.\n\n`;
-        helpMessage += '• **How to whitelist:**\n';
-        helpMessage += '  1. Please do whitelist request in support ticket. so your data is not EXPOSED.\n';
-        helpMessage += '  2. Use the command above with your SteamID64, desired username, and password.\n';
-        helpMessage += '  3. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
-        helpMessage += '  4. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n\n';
+
+        // How to Whitelist section
+        helpMessage += '**How to Whitelist:**\n';
+        helpMessage += '1. Use the command above with your SteamID64, desired username, and password.\n';
+        helpMessage += '2. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
+        helpMessage += '3. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n\n';
+        helpMessage += '**Note:** Please do whitelistrequest in the Support Ticket Channel, so your data is not **EXPOSED**.\n\n';
 
         helpMessage += '**S3 Wallet Commands:**\n';
         helpMessage += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
@@ -539,10 +540,8 @@ export class DiscordBot {
         helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
         helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n\n`;
 
-        // Note about server commands
         helpMessage += '**Note:** Server commands may take a moment to process depending on server load.';
 
-        // Send the help message
         message.channel.send(helpMessage);
       } else if (command === 'serverinfo') {
         try {
