@@ -589,7 +589,11 @@ export class DiscordBot {
           if (status) reply += `**Status:** ${status[1]}\n`;
           if (internetIP) reply += `**Internet IP:** ${internetIP[1]}\n`;
           if (cpuUsed) reply += `**CPU Usage:** ${cpuUsed[1]}\n`;
-          if (memUsed) reply += `**Memory Usage:** ${memUsed[1]}\n`;
+          if (memUsed) {
+            // Extract only the percentage part, removing the MB value
+            const memUsedPercentage = memUsed[1].split(' ')[0];
+            reply += `**Memory Usage:** ${memUsedPercentage}\n`;
+          }
 
           await statusMsg.edit(reply);
         } catch (err) {
