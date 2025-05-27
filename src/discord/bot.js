@@ -520,6 +520,17 @@ export class DiscordBot {
         helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
         helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n`;
         helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`;
+
+        // Whitelist section
+        helpMessage += '**Whitelist Commands:**\n';
+        helpMessage += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
+        helpMessage += `\`${prefix}resetpassword <oldpassword> <newpassword>\` - Reset your whitelist password. You must provide your current password. Your message will be deleted for security.\n\n`;
+        helpMessage += '• **How to whitelist:**\n';
+        helpMessage += '  1. Please do whitelist request in support ticket. so your data is not EXPOSED.\n';
+        helpMessage += '  2. Use the command above with your SteamID64, desired username, and password.\n';
+        helpMessage += '  3. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
+        helpMessage += '  4. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n\n';
+
         helpMessage += '**S3 Wallet Commands:**\n';
         helpMessage += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
         helpMessage += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
