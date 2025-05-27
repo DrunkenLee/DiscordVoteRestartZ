@@ -767,6 +767,42 @@ export class DiscordBot {
           message.channel.send(`Error initiating server start: ${error.message}`);
           console.error('Error during start command:', error);
         }
+      } else if (command === 'whitelistrequest') {
+        // Usage: !whitelistrequest <discordname> <steamid> <username1> <password1>
+        if (args.length < 4) {
+          return message.channel.send('❌ Missing arguments! Usage: `!whitelistrequest <discordname> <steamid> <username1> <password1>`');
+        }
+
+        const [discordname, steamid, username1, password1] = args;
+
+        try {
+          // Check if discordname or steamid already exists in the database
+          const existingByDiscord = await zmUsersDb.findUserByDiscordId(discordname);
+          const existingBySteam = await zmUsersDb.findUserBySteamId
+            ? await zmUsersDb.findUserBySteamId(steamid)
+            : null;
+
+          if (existingByDiscord) {
+            return message.channel.send('❌ This Discord name is already registered in the whitelist database.');
+          }
+          if (existingBySteam) {
+            return message.channel.send('❌ This SteamID is already registered in the whitelist database.');
+          }
+
+          // Proceed to add the request to the database
+          await zmUsersDb.addUser({
+            discordid: discordname,
+            steamid: steamid,
+            username1: username1,
+            password1: password1,
+            extradata: `Requested by ${message.author.tag} on ${new Date().toISOString()}`
+          });
+
+          message.channel.send('✅ Whitelist request submitted successfully! An admin will review your request soon.');
+        } catch (err) {
+          console.error('Error processing whitelist request:', err);
+          message.channel.send(`❌ Error processing whitelist request: ${err.message}`);
+        }
       }
 
       // Add more commands as needed
