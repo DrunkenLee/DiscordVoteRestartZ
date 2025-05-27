@@ -4,6 +4,7 @@ import config from '../config/config.js';
 import { SftpLogReader } from '../utils/sftpLogReader.js';
 import { Client as SSHClient } from 'ssh2';
 import dotenv from 'dotenv';
+import * as zmUsersDb from '../utils/zmUsersDb.js';
 dotenv.config();
 
 export class DiscordBot {
@@ -39,6 +40,9 @@ export class DiscordBot {
     // Add this for cooldown tracking
     this.commandCooldowns = new Map();
     this.cooldownTime = 2 * 60 * 1000; // 2 minutes in ms
+
+    // Add development mode flag
+    this.devMode = true; // Default to false (all commands available)
   }
 
   async login() {
@@ -153,11 +157,30 @@ export class DiscordBot {
       const args = message.content.slice(prefix.length).trim().split(/ +/);
       const command = args.shift().toLowerCase();
 
-      // --- Cooldown check ---
+      // --- Development Mode Check ---
+      const isDeveloper = message.member && message.member.roles.cache.some(role => role.name.toLowerCase() === 'developer');
       const isAdmin = message.member && message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin');
-      const now = Date.now();
-      const cooldownKey = `${message.author.id}:${command}`;
+
+      // If in dev mode, only allow developers and admins to use commands
+      if (this.devMode && !isDeveloper && !isAdmin) {
+        return message.channel.send('⚠️ Bot is currently in development mode. Only developers and admins can use commands.');
+      }
+
+      // Command to toggle dev mode (restricted to developers and admins)
+      if (command === 'devmode') {
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to toggle development mode.');
+        }
+
+        // Toggle dev mode
+        this.devMode = !this.devMode;
+        return message.channel.send(`🔧 Development mode is now **${this.devMode ? 'ON' : 'OFF'}**. ${this.devMode ? 'Only developers and admins can use commands.' : 'All users can use commands.'}`);
+      }
+
+      // --- Cooldown check ---
       if (!isAdmin) { // Admins are immune to cooldown
+        const now = Date.now();
+        const cooldownKey = `${message.author.id}:${command}`;
         if (this.commandCooldowns.has(cooldownKey)) {
           const lastUsed = this.commandCooldowns.get(cooldownKey);
           if (now - lastUsed < this.cooldownTime) {
@@ -371,7 +394,7 @@ export class DiscordBot {
           const statusMsg = await message.channel.send('Fetching killboard, please wait...');
           const result = await this.sftpLogReader.getKillBoard();
           if (result && result.length > 0) {
-            let reply = '**🏆 Top 10 Melee Killboard 🏆**\n\n```';
+            let reply = '**🏆 Top 10 Killboard 🏆**\n\n```';
             result.forEach((entry, idx) => {
               reply += `\n${idx + 1}. ${entry.name} — ${entry.kills} kills`;
             });
@@ -399,10 +422,30 @@ export class DiscordBot {
         const username = args[0];
         const password = args[1];
 
+        // Optional Discord ID if mentioning a user
+        let discordId = null;
+        if (message.mentions.users.size > 0) {
+          discordId = message.mentions.users.first().id;
+        }
+
         try {
           // Send the adduser command to the server
           const response = await wrappedRconClient.send(`adduser "${username}" "${password}"`);
-          message.channel.send(`✅ User command executed: ${response || 'Command sent, but no response received.'}`);
+
+          // Also store in database
+          try {
+            await zmUsersDb.addUser({
+              discordid: discordId,
+              username1: username,
+              password1: password,
+              extradata: `Added by ${message.author.tag} on ${new Date().toISOString()}`
+            });
+
+            message.channel.send(`✅ User command executed: ${response || 'Command sent, but no response received.'} User also added to database.`);
+          } catch (dbError) {
+            console.error('Database error when adding user:', dbError);
+            message.channel.send(`✅ User added to server, but failed to add to database: ${dbError.message}`);
+          }
 
           // For security, try to delete the original message that contains the password
           try {
@@ -492,25 +535,61 @@ export class DiscordBot {
         message.channel.send(helpMessage);
       } else if (command === 'serverinfo') {
         try {
-          const statusMsg = await message.channel.send('Fetching server info from BattleMetrics...');
-          const url = `https://api.battlemetrics.com/servers/${config.battlemetrics.serverId}`;
-          const headers = config.battlemetrics.apiKey
-            ? { Authorization: `Bearer ${config.battlemetrics.apiKey}` }
-            : {};
-          const res = await fetch(url, { headers });
-          if (!res.ok) throw new Error(`BattleMetrics API error: ${res.statusText}`);
-          const data = await res.json();
-          const attr = data.data.attributes;
-          const details = attr.details || {};
+          const statusMsg = await message.channel.send('Fetching server info via SSH...');
 
-          let reply = `**🖥️ Server Info**\n\n`;
-          reply += `**Name:** ${attr.name}\n`;
-          reply += `**IP:** ${attr.ip}\n`;
-          reply += `**Port:** ${attr.port}\n`;
-          reply += `**Status:** ${attr.status}\n`;
-          reply += `**Open:** ${details.zomboid_open ? 'Yes' : 'No'}\n`;
-          reply += `**Version:** ${details.version || 'Unknown'}\n`;
-          reply += `**Discord Inv Link:** discord.gg/zonamerah\n`;
+          // Use SSH to execute the detail command
+          const sshConfig = {
+            host: process.env.OVH_SG_HOST,
+            port: process.env.OVH_SG_PORT_SSH,
+            username: process.env.OVH_SG_USERNAME,
+            password: process.env.OVH_SG_PASSWORD,
+          };
+
+          const conn = new SSHClient();
+          let serverDetails = '';
+
+          await new Promise((resolve, reject) => {
+            conn.on('ready', () => {
+              conn.exec('./pzserver details', (err, stream) => {
+                if (err) {
+                  conn.end();
+                  return reject(err);
+                }
+
+                stream.on('data', (data) => {
+                  serverDetails += data.toString();
+                });
+
+                stream.on('close', () => {
+                  conn.end();
+                  resolve();
+                });
+
+                stream.stderr.on('data', (data) => {
+                  console.error(`SSH stderr: ${data.toString()}`);
+                });
+              });
+            }).on('error', reject).connect(sshConfig);
+          });
+
+          // Strip ANSI color codes
+          serverDetails = serverDetails.replace(/\x1B\[\d+m/g, '');
+
+          // Parse only the requested information
+          let reply = `**🖥️ Zona Merah Server Info**\n\n`;
+
+          // Extract information with updated regex patterns
+          const serverName = serverDetails.match(/Server Name:\s+(.*?)(?:\r?\n|$)/);
+          const status = serverDetails.match(/Status:\s+(.*?)(?:\r?\n|$)/);
+          const internetIP = serverDetails.match(/Internet IP:\s+(.*?)(?:\r?\n|$)/);
+          const memUsed = serverDetails.match(/Mem Used:\s+(.*?)(?:\r?\n|$)/);
+          const cpuUsed = serverDetails.match(/CPU Used:\s+(.*?)(?:\r?\n|$)/);
+
+          if (serverName) reply += `**Server Name:** ${serverName[1]}\n`;
+          if (status) reply += `**Status:** ${status[1]}\n`;
+          if (internetIP) reply += `**Internet IP:** ${internetIP[1]}\n`;
+          if (cpuUsed) reply += `**CPU Usage:** ${cpuUsed[1]}\n`;
+          if (memUsed) reply += `**Memory Usage:** ${memUsed[1].split("(")[0].trim()}\n`;
 
           await statusMsg.edit(reply);
         } catch (err) {
@@ -541,6 +620,152 @@ export class DiscordBot {
             message.channel.send('❌ Unable to send you a DM. Please check your privacy settings.');
           }
           console.error(`Error in !${command}:`, err);
+        }
+      } else if (command === 'start') {
+        try {
+          // If admin or developer, start immediately without voting
+          if (isDeveloper || isAdmin) {
+            await message.channel.send(`Server start initiated by ${message.author.username} (${isDeveloper ? 'Developer' : 'Admin'})...`);
+
+            try {
+              const sshConfig = {
+                host: process.env.OVH_SG_HOST,
+                port: process.env.OVH_SG_PORT_SSH,
+                username: process.env.OVH_SG_USERNAME,
+                password: process.env.OVH_SG_PASSWORD,
+              };
+
+              const conn = new SSHClient();
+              await new Promise((resolve, reject) => {
+                conn.on('ready', () => {
+                  conn.exec('./pzserver start', (err, stream) => {
+                    if (err) {
+                      conn.end();
+                      return reject(err);
+                    }
+                    stream.on('close', () => {
+                      conn.end();
+                      resolve();
+                    });
+                    stream.on('data', () => {});
+                    stream.stderr.on('data', () => {});
+                  });
+                }).on('error', reject).connect(sshConfig);
+              });
+
+              await message.channel.send('✅ Server start command sent via SSH. Server should be online shortly.');
+            } catch (startError) {
+              await message.channel.send(`❌ Error during server start: ${startError.message}`);
+              console.error('Start error:', startError);
+            }
+
+            return;
+          }
+
+          // For regular users, require voting
+          // Set 4 hours cooldown (in ms)
+          this.startCooldown = 4 * 60 * 60 * 1000;
+          this.requiredConfirmations = 3;
+
+          // Check cooldown period
+          if (this.lastStartTime) {
+            const timeSinceLastStart = Date.now() - this.lastStartTime;
+            if (timeSinceLastStart < this.startCooldown) {
+              const remainingTime = this.startCooldown - timeSinceLastStart;
+              const remainingMinutes = Math.ceil(remainingTime / (60 * 1000));
+              return message.channel.send(
+                `Server start is on cooldown. Please wait ${remainingMinutes} more minutes before starting again.`
+              );
+            }
+          }
+
+          // Track unique users for confirm and cancel
+          const confirmedUsers = new Set();
+          const canceledUsers = new Set();
+
+          const confirmMsg = await message.channel.send(
+            `**Server Start Requested!**\n` +
+            `**${confirmedUsers.size}/3** confirms | **${canceledUsers.size}/1** cancels\n` +
+            `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+            `**Note:** At least 3 different users must confirm, or 1 must cancel.`
+          );
+
+          const filter = m => ['confirm', 'cancel'].includes(m.content.toLowerCase());
+          const collector = message.channel.createMessageCollector({ filter, time: 120000 });
+
+          collector.on('collect', async (m) => {
+            const action = m.content.toLowerCase();
+            if (action === 'confirm' && !confirmedUsers.has(m.author.id)) {
+              confirmedUsers.add(m.author.id);
+            }
+            if (action === 'cancel' && !canceledUsers.has(m.author.id)) {
+              canceledUsers.add(m.author.id);
+            }
+
+            // Update the confirmation message
+            await confirmMsg.edit(
+              `**Server Start Requested!**\n` +
+              `**${confirmedUsers.size}/3** confirms | **${canceledUsers.size}/1** cancels\n` +
+              `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+              `**Note:** At least 3 different users must confirm, or 1 must cancel.`
+            );
+
+            // If enough cancels, stop collector and cancel
+            if (canceledUsers.size >= 1) {
+              collector.stop('canceled');
+            }
+            // If enough confirms, stop collector and proceed
+            if (confirmedUsers.size >= 3) {
+              collector.stop('confirmed');
+            }
+          });
+
+          collector.on('end', async (collected, reason) => {
+            if (reason === 'canceled') {
+              await confirmMsg.edit(`**Server Start Canceled!** (${canceledUsers.size} user canceled)`);
+              return;
+            } else if (reason === 'confirmed') {
+              await message.channel.send(`Confirmed by ${confirmedUsers.size} users! Starting server...`);
+
+              try {
+                const sshConfig = {
+                  host: process.env.OVH_SG_HOST,
+                  port: process.env.OVH_SG_PORT_SSH,
+                  username: process.env.OVH_SG_USERNAME,
+                  password: process.env.OVH_SG_PASSWORD,
+                };
+
+                const conn = new SSHClient();
+                await new Promise((resolve, reject) => {
+                  conn.on('ready', () => {
+                    conn.exec('./pzserver start', (err, stream) => {
+                      if (err) {
+                        conn.end();
+                        return reject(err);
+                      }
+                      stream.on('close', () => {
+                        conn.end();
+                        resolve();
+                      });
+                      stream.on('data', () => {});
+                      stream.stderr.on('data', () => {});
+                    });
+                  }).on('error', reject).connect(sshConfig);
+                });
+
+                await message.channel.send('✅ Server start command sent via SSH. Server should be online shortly.');
+                this.lastStartTime = Date.now();
+              } catch (startError) {
+                await message.channel.send(`❌ Error during server start: ${startError.message}`);
+                console.error('Start error:', startError);
+              }
+            } else {
+              await confirmMsg.edit('**Server Start Request Timed Out!** Not enough confirmations received within the time limit.');
+            }
+          });
+        } catch (error) {
+          message.channel.send(`Error initiating server start: ${error.message}`);
+          console.error('Error during start command:', error);
         }
       }
 
