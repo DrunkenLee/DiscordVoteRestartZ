@@ -768,37 +768,60 @@ export class DiscordBot {
           console.error('Error during start command:', error);
         }
       } else if (command === 'whitelistrequest') {
-        // Usage: !whitelistrequest <discordname> <steamid> <username1> <password1>
-        if (args.length < 4) {
-          return message.channel.send('❌ Missing arguments! Usage: `!whitelistrequest <discordname> <steamid> <username1> <password1>`');
+        // Usage: !whitelistrequest <steamid> <username1> <password1>
+        if (args.length < 3) {
+          return message.channel.send('❌ Missing arguments! Usage: `!whitelistrequest <steamid> <username1> <password1>`');
         }
 
-        const [discordname, steamid, username1, password1] = args;
+        const [steamid, username1, password1] = args;
+        const discordid = message.author.tag; // Discord tag (e.g., User#1234)
+        const discordUserId = message.author.id; // Discord user ID
 
         try {
-          // Check if discordname or steamid already exists in the database
-          const existingByDiscord = await zmUsersDb.findUserByDiscordId(discordname);
-          const existingBySteam = await zmUsersDb.findUserBySteamId
+          // Check if discordid or steamid already exists in the database
+          const existingByDiscord = await zmUsersDb.findUserByDiscordId(discordid);
+          const existingBySteam = zmUsersDb.findUserBySteamId
             ? await zmUsersDb.findUserBySteamId(steamid)
             : null;
 
           if (existingByDiscord) {
-            return message.channel.send('❌ This Discord name is already registered in the whitelist database.');
+            return message.channel.send('❌ Your Discord account is already registered in the whitelist database.');
           }
           if (existingBySteam) {
             return message.channel.send('❌ This SteamID is already registered in the whitelist database.');
           }
 
-          // Proceed to add the request to the database
+          // 1. Remove user from whitelist (if exists)
+          try {
+            await wrappedRconClient.send(`removeuserfromwhitelist "${username1}"`);
+          } catch (e) {
+            // Ignore errors, user might not exist yet
+          }
+
+          // 2. Add user to whitelist
+          await wrappedRconClient.send(`adduser "${username1}" "${password1}"`);
+
+          // 3. Insert all data to Supabase
           await zmUsersDb.addUser({
-            discordid: discordname,
+            discordid: discordid,
             steamid: steamid,
             username1: username1,
             password1: password1,
             extradata: `Requested by ${message.author.tag} on ${new Date().toISOString()}`
           });
 
-          message.channel.send('✅ Whitelist request submitted successfully! An admin will review your request soon.');
+          // 4. Give "Whitelisted" role to the user
+          const whitelistedRole = message.guild.roles.cache.find(
+            role => role.name.toLowerCase() === 'whitelisted'
+          );
+          if (whitelistedRole) {
+            const member = await message.guild.members.fetch(discordUserId);
+            if (member && !member.roles.cache.has(whitelistedRole.id)) {
+              await member.roles.add(whitelistedRole);
+            }
+          }
+
+          message.channel.send('✅ Whitelist request processed! You are now whitelisted and have been given the Whitelisted role.');
         } catch (err) {
           console.error('Error processing whitelist request:', err);
           message.channel.send(`❌ Error processing whitelist request: ${err.message}`);
