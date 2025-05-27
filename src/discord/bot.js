@@ -589,7 +589,7 @@ export class DiscordBot {
           if (status) reply += `**Status:** ${status[1]}\n`;
           if (internetIP) reply += `**Internet IP:** ${internetIP[1]}\n`;
           if (cpuUsed) reply += `**CPU Usage:** ${cpuUsed[1]}\n`;
-          if (memUsed) reply += `**Memory Usage:** ${memUsed[1].split("(")[0].trim()}\n`;
+          if (memUsed) reply += `**Memory Usage:** ${memUsed[1]}\n`;
 
           await statusMsg.edit(reply);
         } catch (err) {
@@ -777,18 +777,27 @@ export class DiscordBot {
         const discordid = message.author.tag; // Discord tag (e.g., User#1234)
         const discordUserId = message.author.id; // Discord user ID
 
+        // Validate SteamID64 (17 digits, all numbers)
+        function isValidSteamID(steamid) {
+          return /^\d{17}$/.test(steamid);
+        }
+
+        if (!isValidSteamID(steamid)) {
+          return message.channel.send('❌ Invalid SteamID! Please enter a valid 17-digit SteamID64 (numbers only).');
+        }
+
         try {
-          // Check if discordid or steamid already exists in the database
+          // Check if discordid or username already exists in the database
           const existingByDiscord = await zmUsersDb.findUserByDiscordId(discordid);
-          const existingBySteam = zmUsersDb.findUserBySteamId
-            ? await zmUsersDb.findUserBySteamId(steamid)
+          const existingByUsername = zmUsersDb.findUserByUsername
+            ? await zmUsersDb.findUserByUsername(username1)
             : null;
 
           if (existingByDiscord) {
             return message.channel.send('❌ Your Discord account is already registered in the whitelist database.');
           }
-          if (existingBySteam) {
-            return message.channel.send('❌ This SteamID is already registered in the whitelist database.');
+          if (existingByUsername) {
+            return message.channel.send('❌ This username is already registered in the whitelist database.');
           }
 
           // 1. Remove user from whitelist (if exists)
