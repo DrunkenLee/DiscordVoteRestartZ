@@ -509,7 +509,6 @@ export class DiscordBot {
         let helpMessage = '**🤖 Zona Merah Project Z - Command List 🤖**\n\n';
 
         // General commands (no role requirements)
-        helpMessage += '```\n';
         helpMessage += '**General Commands:**\n';
         helpMessage += `\`${prefix}help\` - Shows this help message\n`;
         helpMessage += `\`${prefix}ping\` - Check bot response time\n`;
@@ -519,43 +518,29 @@ export class DiscordBot {
         helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
         helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
         helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime\n`;
-        helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n`;
-        helpMessage += '```\n\n';
+        helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`;
 
         // Whitelist section
-        helpMessage += '```\n';
         helpMessage += '**Whitelist Commands:**\n';
         helpMessage += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
-        helpMessage += `\`${prefix}resetpassword <oldpassword> <newpassword>\` - Reset your whitelist password. You must provide your current password. Your message will be deleted for security.\n`;
-        helpMessage += '```\n\n';
+        helpMessage += `\`${prefix}resetpassword <oldpassword> <newpassword>\` - Reset your whitelist password. You must provide your current password. Your message will be deleted for security.\n\n`;
 
         // How to Whitelist section
-        helpMessage += '```\n';
         helpMessage += '**How to Whitelist:**\n';
         helpMessage += '1. Use the command above with your SteamID64, desired username, and password.\n';
         helpMessage += '2. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
-        helpMessage += '3. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n';
-        helpMessage += '**Note:** Please do whitelistrequest in the Support Ticket Channel, so your data is not **EXPOSED**.\n';
-        helpMessage += '```\n\n';
+        helpMessage += '3. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n\n';
+        helpMessage += '**Note:** Please do whitelistrequest in the Support Ticket Channel, so your data is not **EXPOSED**.\n\n';
 
-        // S3 Wallet section
-        helpMessage += '```section\n';
         helpMessage += '**S3 Wallet Commands:**\n';
         helpMessage += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
-        helpMessage += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n`;
-        helpMessage += '```\n\n';
+        helpMessage += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
 
-        // Admin section
-        helpMessage += '```\n';
         helpMessage += '**Admin Commands:**\n';
         helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
-        helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
-        helpMessage += '```\n\n';
+        helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n\n`;
 
-        // Note about server commands
-        helpMessage += '```\n';
-        helpMessage += '**Note:** Server commands may take a moment to process depending on server load.\n';
-        helpMessage += '```\n';
+        helpMessage += '**Note:** Server commands may take a moment to process depending on server load.';
 
         message.channel.send(helpMessage);
       } else if (command === 'serverinfo') {
