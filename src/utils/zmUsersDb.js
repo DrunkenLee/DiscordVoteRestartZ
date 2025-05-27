@@ -40,5 +40,14 @@ export async function addUser(userData) {
   return result.rows[0];
 }
 
+// zmUsersDb.js
+export async function updateUserPasswordByDiscordId(discordid, newPassword) {
+  const result = await pool.query(
+    'UPDATE public.zmusers SET password1 = $1 WHERE discordid = $2 RETURNING *',
+    [newPassword, discordid]
+  );
+  return result.rows[0];
+}
+
 // Export the pool for advanced queries if needed
 export { pool };

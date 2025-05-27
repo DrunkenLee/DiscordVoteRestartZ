@@ -774,16 +774,28 @@ export class DiscordBot {
       } else if (command === 'whitelistrequest') {
         // Usage: !whitelistrequest <steamid> <username1> <password1>
         if (args.length < 3) {
+          try {
+            if (message.deletable) await message.delete();
+          } catch (e) {
+            console.error('Failed to delete message with sensitive info:', e);
+          }
           return message.channel.send('❌ Missing arguments! Usage: `!whitelistrequest <steamid> <username1> <password1>`');
         }
 
         const [steamid, username1, password1] = args;
-        const discordid = message.author.tag; // Discord tag (e.g., User#1234)
-        const discordUserId = message.author.id; // Discord user ID
+        const discordid = message.author.tag;
+        const discordUserId = message.author.id;
 
         // Validate SteamID64 (17 digits, all numbers)
         function isValidSteamID(steamid) {
           return /^\d{17}$/.test(steamid);
+        }
+
+        // Always try to delete the original message for security
+        try {
+          if (message.deletable) await message.delete();
+        } catch (e) {
+          console.error('Failed to delete message with sensitive info:', e);
         }
 
         if (!isValidSteamID(steamid)) {
@@ -809,6 +821,7 @@ export class DiscordBot {
             await wrappedRconClient.send(`removeuserfromwhitelist "${username1}"`);
           } catch (e) {
             // Ignore errors, user might not exist yet
+            console.warn(`removeuserfromwhitelist failed for ${username1}:`, e.message);
           }
 
           // 2. Add user to whitelist
@@ -828,16 +841,85 @@ export class DiscordBot {
             role => role.name.toLowerCase() === 'whitelisted'
           );
           if (whitelistedRole) {
-            const member = await message.guild.members.fetch(discordUserId);
-            if (member && !member.roles.cache.has(whitelistedRole.id)) {
-              await member.roles.add(whitelistedRole);
+            try {
+              const member = await message.guild.members.fetch(discordUserId);
+              if (member && !member.roles.cache.has(whitelistedRole.id)) {
+                await member.roles.add(whitelistedRole);
+              }
+            } catch (roleErr) {
+              console.error('Failed to assign Whitelisted role:', roleErr);
+              await message.channel.send('✅ Whitelist request processed, but failed to assign Whitelisted role. Please contact an admin.');
+              return;
             }
           }
 
           message.channel.send('✅ Whitelist request processed! You are now whitelisted and have been given the Whitelisted role.');
         } catch (err) {
           console.error('Error processing whitelist request:', err);
-          message.channel.send(`❌ Error processing whitelist request: ${err.message}`);
+          let errorMsg = '❌ Error processing whitelist request.';
+          if (err.message) errorMsg += ` Reason: ${err.message}`;
+          message.channel.send(errorMsg);
+        }
+      } else if (command === 'resetpassword') {
+        // Usage: !resetpassword <oldpassword> <newpassword>
+        if (args.length < 2) {
+          try {
+            if (message.deletable) await message.delete();
+          } catch (e) {
+            console.error('Failed to delete message with sensitive info:', e);
+          }
+          return message.channel.send('❌ Missing arguments! Usage: `!resetpassword <oldpassword> <newpassword>`');
+        }
+
+        const [oldPassword, newPassword] = args;
+        const discordid = message.author.tag;
+
+        // Always try to delete the original message for security
+        try {
+          if (message.deletable) await message.delete();
+        } catch (e) {
+          console.error('Failed to delete message with sensitive info:', e);
+        }
+
+        try {
+          // Find user by Discord ID
+          const user = await zmUsersDb.findUserByDiscordId(discordid);
+
+          if (!user) {
+            return message.channel.send('❌ No whitelist entry found for your Discord account.');
+          }
+
+          const username = user.username1;
+
+          if (!username) {
+            return message.channel.send('❌ No username found for your whitelist entry.');
+          }
+
+          // Check if old password matches
+          if (user.password1 !== oldPassword) {
+            return message.channel.send('❌ The old password you entered is incorrect.');
+          }
+
+          // 1. Remove user from whitelist (ignore errors)
+          try {
+            await wrappedRconClient.send(`removeuserfromwhitelist "${username}"`);
+          } catch (e) {
+            // Ignore errors, user might not exist yet
+            console.warn(`removeuserfromwhitelist failed for ${username}:`, e.message);
+          }
+
+          // 2. Add user with new password
+          await wrappedRconClient.send(`adduser "${username}" "${newPassword}"`);
+
+          // 3. Update password in Supabase
+          await zmUsersDb.updateUserPasswordByDiscordId(discordid, newPassword);
+
+          message.channel.send('✅ Password reset successful! Your whitelist password has been updated.');
+        } catch (err) {
+          console.error('Error processing password reset:', err);
+          let errorMsg = '❌ Error processing password reset.';
+          if (err.message) errorMsg += ` Reason: ${err.message}`;
+          message.channel.send(errorMsg);
         }
       }
 
