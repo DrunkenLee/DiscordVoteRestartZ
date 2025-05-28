@@ -100,9 +100,14 @@ export class SftpLogReader {
       const lines = iniContent.toString().split('\n');
       const killCounts = [];
       let inSection = false;
+      let sectionName = '[KillCounts]';
+      // Detect section for RavenCreek file
+      if (filename.toLowerCase().includes('ravencreek')) {
+        sectionName = '[RavenCreekKillCounts]';
+      }
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed.startsWith('[KillCounts]')) {
+        if (trimmed.startsWith(sectionName)) {
           inSection = true;
           continue;
         }
