@@ -42,7 +42,7 @@ export class DiscordBot {
     this.cooldownTime = 2 * 60 * 1000; // 2 minutes in ms
 
     // Add development mode flag
-    this.devMode = true; // Default to false (all commands available)
+    this.devMode = false; // Default to false (all commands available)
   }
 
   async login() {
@@ -392,7 +392,7 @@ export class DiscordBot {
       } else if (command === 'killboard') {
         try {
           const statusMsg = await message.channel.send('Fetching killboard, please wait...');
-          const result = await this.sftpLogReader.getKillBoard();
+          const result = await this.sftpLogReader.getKillBoard('ZonaMerah_KillCounts.ini');
           if (result && result.length > 0) {
             let reply = '**🏆 Top 10 Killboard 🏆**\n\n```';
             result.forEach((entry, idx) => {
@@ -414,7 +414,7 @@ export class DiscordBot {
           // Use a different filename for RavenCreek killboard
           const result = await this.sftpLogReader.getKillBoard('ZonaMerah_RavenCreekKillCounts.ini');
           if (result && result.length > 0) {
-            let reply = '**🏆 RavenCreek Top 10 Killboard 🏆**\n\n```';
+            let reply = '**🏆 RavenCreek Top 10 (Raven Creek Champion) 🏆**\n\n```';
             result.slice(0, 10).forEach((entry, idx) => {
               reply += `\n${idx + 1}. ${entry.name} — ${entry.kills} kills`;
             });

@@ -92,10 +92,10 @@ export class SftpLogReader {
     }
   }
 
-  async getKillBoard() {
+  async getKillBoard(filename) {
     try {
       await this.connect();
-      const iniPath = '/home/ubuntu/Zomboid/Lua/ZonaMerah_KillCounts.ini';
+      const iniPath = `/home/ubuntu/Zomboid/Lua/${filename}`;
       const iniContent = await this.sftp.get(iniPath);
       const lines = iniContent.toString().split('\n');
       const killCounts = [];
