@@ -224,6 +224,53 @@ export class DiscordBot {
             }
           }
 
+          // If admin, skip confirmation and restart immediately
+          if (isAdmin) {
+            await message.channel.send(`Server restart initiated by ${message.author.username} (Admin)...`);
+            try {
+              // First warning via RCON
+              await wrappedRconClient.send('servermsg "SERVER RESTART: Restart initiated by Admin. Server will restart in 3 minutes."');
+              // Wait 2 minutes
+              setTimeout(async () => {
+                // Second warning via RCON
+                await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"');
+                // Wait 1 more minute, then restart via SSH
+                setTimeout(async () => {
+                  const sshConfig = {
+                    host: process.env.OVH_SG_HOST,
+                    port: process.env.OVH_SG_PORT_SSH,
+                    username: process.env.OVH_SG_USERNAME,
+                    password: process.env.OVH_SG_PASSWORD,
+                  };
+                  const conn = new SSHClient();
+                  await new Promise((resolve, reject) => {
+                    conn.on('ready', () => {
+                      conn.exec('./pzserver restart', (err, stream) => {
+                        if (err) {
+                          conn.end();
+                          return reject(err);
+                        }
+                        stream.on('close', () => {
+                          conn.end();
+                          resolve();
+                        });
+                        stream.on('data', () => {});
+                        stream.stderr.on('data', () => {});
+                      });
+                    }).on('error', reject).connect(sshConfig);
+                  });
+                  await message.channel.send('In-game warnings sent. Server will restart now.');
+                  this.lastRestartTime = Date.now();
+                }, 60000); // 1 minute
+              }, 120000); // 2 minutes
+            } catch (restartError) {
+              await message.channel.send(`Error during restart: ${restartError.message}`);
+              console.error('Restart error:', restartError);
+            }
+            return;
+          }
+
+          // Non-admins: require confirmation
           setTimeout(async () => {
             // Track unique users for confirm and cancel
             const confirmedUsers = new Set();
