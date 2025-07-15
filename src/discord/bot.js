@@ -1031,7 +1031,7 @@ export class DiscordBot {
           const playerMessage = args.slice(1).join(' ');
 
           try {
-            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=playersayfunct;args=${playerMessage}"`);
+            await wrappedRconClient.send(`luacmd clientexe ${username} playersayfunct "${playerMessage}"`);
             message.channel.send(`✅ Sent message command to player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
@@ -1046,7 +1046,7 @@ export class DiscordBot {
           const flagName = args[1];
 
           try {
-            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=setflagnpc;args=${flagName}"`);
+            await wrappedRconClient.send(`luacmd clientexe ${username} setflagnpc ${flagName}`);
             message.channel.send(`✅ Set flag '${flagName}' on player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
@@ -1061,7 +1061,7 @@ export class DiscordBot {
           const flagName = args[1];
 
           try {
-            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=removeflagnpc;args=${flagName}"`);
+            await wrappedRconClient.send(`luacmd clientexe ${username} removeflagnpc ${flagName}`);
             message.channel.send(`✅ Removed flag '${flagName}' from player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
@@ -1076,7 +1076,7 @@ export class DiscordBot {
           const flagName = args[1];
 
           try {
-            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=togglezmflag;args=${flagName}"`);
+            await wrappedRconClient.send(`luacmd clientexe ${username} togglezmflag ${flagName}`);
             message.channel.send(`✅ Toggled ZM flag '${flagName}' for player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
@@ -1095,7 +1095,7 @@ export class DiscordBot {
           }
 
           try {
-            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=sethourssurv;args=${hours}"`);
+            await wrappedRconClient.send(`luacmd clientexe ${username} sethourssurv ${hours}`);
             message.channel.send(`✅ Set hours survived to ${hours} for player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
@@ -1114,7 +1114,7 @@ export class DiscordBot {
           }
 
           try {
-            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=setzombiekills;args=${kills}"`);
+            await wrappedRconClient.send(`luacmd clientexe ${username} setzombiekills ${kills}`);
             message.channel.send(`✅ Set zombie kills to ${kills} for player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
@@ -1136,7 +1136,7 @@ export class DiscordBot {
           }
 
           try {
-            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=debugapplyenchant;args=${minDMG},${maxDMG},${enchantment},${name}"`);
+            await wrappedRconClient.send(`luacmd clientexe ${username} debugapplyenchant ${minDMG} ${maxDMG} ${enchantment} ${name}`);
             message.channel.send(`✅ Applied enchantment ${enchantment} to weapon for player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
