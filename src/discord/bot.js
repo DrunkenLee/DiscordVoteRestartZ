@@ -606,7 +606,8 @@ export class DiscordBot {
 
         helpMessage += '**Admin Commands:**\n';
         helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
-        helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n\n`;
+        helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
+        helpMessage += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n\n`;
 
         helpMessage += '**Note:** Server commands may take a moment to process depending on server load.';
 
@@ -999,13 +1000,154 @@ export class DiscordBot {
           if (err.message) errorMsg += ` Reason: ${err.message}`;
           message.channel.send(errorMsg);
         }
+      } else if (command.startsWith('dev')) {
+        // Check if user has admin or developer role
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to use developer commands.');
+        }
+
+        const devCommand = command.substring(3); // Remove 'dev' prefix
+
+        if (devCommand === 'help') {
+          let helpMessage = '**🔧 Developer Commands (ZM_ClientExecutor)**\n\n';
+          helpMessage += '```\n';
+          helpMessage += '!devplayersay <username> <message> - Make player say a message\n';
+          helpMessage += '!devsetflag <username> <flagname> - Set flag on player\n';
+          helpMessage += '!devremoveflag <username> <flagname> - Remove flag from player\n';
+          helpMessage += '!devtoggleflag <username> <flagname> - Toggle ZM flag on player\n';
+          helpMessage += '!devsethours <username> <hours> - Set hours survived for player\n';
+          helpMessage += '!devsetzombiekills <username> <kills> - Set zombie kills for player\n';
+          helpMessage += '!devenchant <username> <minDMG> <maxDMG> <enchant> <name> - Apply enchantment to weapon\n';
+          helpMessage += '```\n';
+          helpMessage += '**Note:** All commands require @admin or @developer role.';
+          return message.channel.send(helpMessage);
+        }
+
+        if (devCommand === 'playersay') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devplayersay <username> <message>`');
+          }
+          const username = args[0];
+          const playerMessage = args.slice(1).join(' ');
+
+          try {
+            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=playersayfunct;args=${playerMessage}"`);
+            message.channel.send(`✅ Sent message command to player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        }
+
+        else if (devCommand === 'setflag') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devsetflag <username> <flagname>`');
+          }
+          const username = args[0];
+          const flagName = args[1];
+
+          try {
+            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=setflagnpc;args=${flagName}"`);
+            message.channel.send(`✅ Set flag '${flagName}' on player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        }
+
+        else if (devCommand === 'removeflag') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devremoveflag <username> <flagname>`');
+          }
+          const username = args[0];
+          const flagName = args[1];
+
+          try {
+            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=removeflagnpc;args=${flagName}"`);
+            message.channel.send(`✅ Removed flag '${flagName}' from player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        }
+
+        else if (devCommand === 'toggleflag') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devtoggleflag <username> <flagname>`');
+          }
+          const username = args[0];
+          const flagName = args[1];
+
+          try {
+            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=togglezmflag;args=${flagName}"`);
+            message.channel.send(`✅ Toggled ZM flag '${flagName}' for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        }
+
+        else if (devCommand === 'sethours') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devsethours <username> <hours>`');
+          }
+          const username = args[0];
+          const hours = args[1];
+
+          if (isNaN(hours)) {
+            return message.channel.send('❌ Hours must be a valid number.');
+          }
+
+          try {
+            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=sethourssurv;args=${hours}"`);
+            message.channel.send(`✅ Set hours survived to ${hours} for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        }
+
+        else if (devCommand === 'setzombiekills') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devsetzombiekills <username> <kills>`');
+          }
+          const username = args[0];
+          const kills = args[1];
+
+          if (isNaN(kills)) {
+            return message.channel.send('❌ Kills must be a valid number.');
+          }
+
+          try {
+            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=setzombiekills;args=${kills}"`);
+            message.channel.send(`✅ Set zombie kills to ${kills} for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        }
+
+        else if (devCommand === 'enchant') {
+          if (args.length < 5) {
+            return message.channel.send('❌ Usage: `!devenchant <username> <minDMG> <maxDMG> <enchantment> <name>`');
+          }
+          const username = args[0];
+          const minDMG = args[1];
+          const maxDMG = args[2];
+          const enchantment = args[3];
+          const name = args[4];
+
+          if (isNaN(minDMG) || isNaN(maxDMG) || isNaN(enchantment)) {
+            return message.channel.send('❌ minDMG, maxDMG, and enchantment must be valid numbers.');
+          }
+
+          try {
+            await wrappedRconClient.send(`sendPlayerClientCommand "${username}" "ZM_ClientExe" "ExecuteFunction" "targetUsername=${username};functionName=debugapplyenchant;args=${minDMG},${maxDMG},${enchantment},${name}"`);
+            message.channel.send(`✅ Applied enchantment ${enchantment} to weapon for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        }
+
+        else {
+          message.channel.send(`❌ Unknown developer command: ${devCommand}. Use \`!devhelp\` to see available commands.`);
+        }
+
       }
-
-      // Add more commands as needed
-    });
-
-    this.client.once(Events.ClientReady, () => {
-      console.log(`Bot is ready! Logged in as ${this.client.user.tag}`);
     });
   }
 
