@@ -176,4 +176,120 @@ export class SftpLogReader {
       await this.disconnect();
     }
   }
+
+  async updateServerFlag(flagName, value) {
+    try {
+      await this.connect();
+
+      const flagsFilePath = '/home/ubuntu/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
+
+      // Read current file content
+      let fileContent;
+      try {
+        const buffer = await this.sftp.get(flagsFilePath);
+        fileContent = buffer.toString('utf8');
+      } catch (readError) {
+        // If file doesn't exist, create default content
+        console.log('Server flags file not found, creating new one...');
+        fileContent = `[ServerFlags]
+supplyRunAvailableFlag=0
+expeditionRunAvailableFlag=0
+eventActiveFlag=0
+maintenanceModeFlag=0
+specialEventFlag=0
+pvpEnabledFlag=0
+tradingEnabledFlag=1
+questSystemEnabledFlag=1
+serverMessage="Welcome to ZonaMerah"
+eventDescription=""`;
+      }
+
+      // Update the specific flag
+      const flagPattern = new RegExp(`^${flagName}=.*$`, 'm');
+      if (flagPattern.test(fileContent)) {
+        // Flag exists, update it
+        fileContent = fileContent.replace(flagPattern, `${flagName}=${value}`);
+      } else {
+        // Flag doesn't exist, add it under [ServerFlags] section
+        const serverFlagsPattern = /(\[ServerFlags\]\s*\n)/;
+        if (serverFlagsPattern.test(fileContent)) {
+          fileContent = fileContent.replace(serverFlagsPattern, `$1${flagName}=${value}\n`);
+        } else {
+          // No [ServerFlags] section, add everything
+          fileContent = `[ServerFlags]\n${flagName}=${value}\n` + fileContent;
+        }
+      }
+
+      // Write updated content back to file
+      await this.sftp.put(Buffer.from(fileContent, 'utf8'), flagsFilePath);
+
+      console.log(`✅ Updated server flag '${flagName}' to '${value}' in ${flagsFilePath}`);
+      return true;
+
+    } catch (error) {
+      console.error('Error updating server flag:', error);
+      throw error;
+    } finally {
+      await this.disconnect();
+    }
+  }
+
+  async updateMultipleServerFlags(flagUpdates) {
+    try {
+      await this.connect();
+
+      const flagsFilePath = '/home/ubuntu/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
+
+      // Read current file content
+      let fileContent;
+      try {
+        const buffer = await this.sftp.get(flagsFilePath);
+        fileContent = buffer.toString('utf8');
+      } catch (readError) {
+        // If file doesn't exist, create default content
+        console.log('Server flags file not found, creating new one...');
+        fileContent = `[ServerFlags]
+supplyRunAvailableFlag=0
+expeditionRunAvailableFlag=0
+eventActiveFlag=0
+maintenanceModeFlag=0
+specialEventFlag=0
+pvpEnabledFlag=0
+tradingEnabledFlag=1
+questSystemEnabledFlag=1
+serverMessage="Welcome to ZonaMerah"
+eventDescription=""`;
+      }
+
+      // Update each flag
+      for (const [flagName, value] of Object.entries(flagUpdates)) {
+        const flagPattern = new RegExp(`^${flagName}=.*$`, 'm');
+        if (flagPattern.test(fileContent)) {
+          // Flag exists, update it
+          fileContent = fileContent.replace(flagPattern, `${flagName}=${value}`);
+        } else {
+          // Flag doesn't exist, add it under [ServerFlags] section
+          const serverFlagsPattern = /(\[ServerFlags\]\s*\n)/;
+          if (serverFlagsPattern.test(fileContent)) {
+            fileContent = fileContent.replace(serverFlagsPattern, `$1${flagName}=${value}\n`);
+          } else {
+            // No [ServerFlags] section, add everything
+            fileContent = `[ServerFlags]\n${flagName}=${value}\n` + fileContent;
+          }
+        }
+      }
+
+      // Write updated content back to file
+      await this.sftp.put(Buffer.from(fileContent, 'utf8'), flagsFilePath);
+
+      console.log(`✅ Updated multiple server flags in ${flagsFilePath}:`, flagUpdates);
+      return true;
+
+    } catch (error) {
+      console.error('Error updating multiple server flags:', error);
+      throw error;
+    } finally {
+      await this.disconnect();
+    }
+  }
 }

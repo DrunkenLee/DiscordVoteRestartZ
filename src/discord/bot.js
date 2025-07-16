@@ -1028,7 +1028,7 @@ export class DiscordBot {
           helpMessage += '!devsethours <username> <hours> - Set hours survived for player\n';
           helpMessage += '!devsetzombiekills <username> <kills> - Set zombie kills for player\n';
           helpMessage += '!devenchant <username> <minDMG> <maxDMG> <enchant> <name> - Apply enchantment to weapon\n';
-          helpMessage += '!devsetserverwideflag <username> <flagname> <value> - Set server-wide flag\n';
+          helpMessage += '!devsetserverwideflag <flagname> <value> - Set server-wide flag via SFTP\n';
           helpMessage += '```\n';
           helpMessage += '**Note:** All commands require @admin or @developer role.';
           return message.channel.send(helpMessage);
@@ -1155,22 +1155,17 @@ export class DiscordBot {
         }
 
         else if (devCommand === 'setserverwideflag') {
-          if (args.length < 3) {
-            return message.channel.send('❌ Usage: `!devsetserverwideflag <username> <flagname> <value>`');
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devsetserverwideflag <flagname> <value>`');
           }
-          const username = args[0];
-          const flagName = args[1];
-          const value = args[2];
-
-          if (isNaN(value)) {
-            return message.channel.send('❌ Value must be a valid number.');
-          }
+          const flagName = args[0];
+          const value = args[1];
 
           try {
-            await wrappedRconClient.send(`luacmd clientexe ${username} setserverwideflag ${flagName} ${value}`);
-            message.channel.send(`✅ Set server-wide flag '${flagName}' to ${value} for player ${username}`);
+            await this.sftpLogReader.updateServerFlag(flagName, value);
+            message.channel.send(`✅ Set server-wide flag '${flagName}' to ${value} via SFTP`);
           } catch (error) {
-            message.channel.send(`❌ Error executing command: ${error.message}`);
+            message.channel.send(`❌ Error updating server flag: ${error.message}`);
           }
         }
 
@@ -1190,32 +1185,14 @@ export class DiscordBot {
       try {
         console.log('🕐 Running daily supply run reset at 12:00 WIB...');
 
-        // Get any online player to execute the commands (we need a username for the lua command)
-        // If no players online, we'll use "admin" as fallback
-        let targetPlayer = 'admin';
+        // Update server flags directly via SFTP
+        const flagUpdates = {
+          supplyRunAvailableFlag: 1,
+          supplyRunCompleted: 0
+        };
 
-        try {
-          const playersResponse = await this.wrappedRconClient.send('players');
-          if (playersResponse && playersResponse.includes(':')) {
-            // Extract first player name from response if available
-            const playerMatch = playersResponse.match(/\d+\.\s*"([^"]+)"/);
-            if (playerMatch && playerMatch[1]) {
-              targetPlayer = playerMatch[1];
-            }
-          }
-        } catch (playerCheckError) {
-          console.warn('Could not get player list for cron job, using fallback:', playerCheckError.message);
-        }
-
-        // Set supplyRunAvailableFlag = 1
-        await this.wrappedRconClient.send(`luacmd clientexe ${targetPlayer} setserverwideflag supplyRunAvailableFlag 1`);
-        console.log('✅ Set supplyRunAvailableFlag to 1');
-
-        // Set supplyRunCompleted = 0
-        await this.wrappedRconClient.send(`luacmd clientexe ${targetPlayer} setserverwideflag supplyRunCompleted 0`);
-        console.log('✅ Set supplyRunCompleted to 0');
-
-        console.log('🎯 Daily supply run reset completed successfully!');
+        await this.sftpLogReader.updateMultipleServerFlags(flagUpdates);
+        console.log('🎯 Daily supply run reset completed successfully via SFTP!');
 
         // Optionally send a server message to notify players
         try {
@@ -1231,7 +1208,7 @@ export class DiscordBot {
       timezone: 'Asia/Jakarta' // WIB timezone
     });
 
-    console.log('📅 Cron job scheduled: Daily supply run reset at 12:00 WIB');
+    console.log('📅 Cron job scheduled: Daily supply run reset at 12:00 WIB (via SFTP)');
   }
 
   // Make sure to clean up when the bot is shutting down
