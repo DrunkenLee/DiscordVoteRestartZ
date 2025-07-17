@@ -292,4 +292,58 @@ eventDescription=""`;
       await this.disconnect();
     }
   }
+
+  async updateGlobalFlags(flagUpdates) {
+    try {
+      await this.connect();
+
+      const globalFlagsFilePath = '/home/ubuntu/Zomboid/Lua/ZMData/ZM_GlobalFlags.lua';
+
+      // Read current file content
+      let fileContent;
+      try {
+        const buffer = await this.sftp.get(globalFlagsFilePath);
+        fileContent = buffer.toString('utf8');
+      } catch (readError) {
+        // If file doesn't exist, create default content
+        console.log('Global flags file not found, creating new one...');
+        fileContent = `return {
+    ["daily_tankWB02_flag"] = true,
+    ["daily_tankWB01_flag"] = true,
+    ["weekly_test01_flag"] = true,
+    ["weekly_test02_flag"] = true,
+}`;
+      }
+
+      // Update each flag in the Lua format
+      for (const [flagName, value] of Object.entries(flagUpdates)) {
+        const flagPattern = new RegExp(`(\\["${flagName}"\\]\\s*=\\s*)(true|false)`, 'g');
+        if (flagPattern.test(fileContent)) {
+          // Flag exists, update it
+          fileContent = fileContent.replace(flagPattern, `$1${value}`);
+        } else {
+          // Flag doesn't exist, add it before the closing brace
+          const closingBracePattern = /(\s*}[^}]*$)/;
+          if (closingBracePattern.test(fileContent)) {
+            fileContent = fileContent.replace(closingBracePattern, `    ["${flagName}"] = ${value},\n$1`);
+          } else {
+            // No proper structure, create one
+            fileContent = `return {\n    ["${flagName}"] = ${value},\n}`;
+          }
+        }
+      }
+
+      // Write updated content back to file
+      await this.sftp.put(Buffer.from(fileContent, 'utf8'), globalFlagsFilePath);
+
+      console.log(`✅ Updated global flags in ${globalFlagsFilePath}:`, flagUpdates);
+      return true;
+
+    } catch (error) {
+      console.error('Error updating global flags:', error);
+      throw error;
+    } finally {
+      await this.disconnect();
+    }
+  }
 }

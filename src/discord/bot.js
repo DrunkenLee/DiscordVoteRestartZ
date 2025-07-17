@@ -1029,6 +1029,7 @@ export class DiscordBot {
           helpMessage += '!devsetzombiekills <username> <kills> - Set zombie kills for player\n';
           helpMessage += '!devenchant <username> <minDMG> <maxDMG> <enchant> <name> - Apply enchantment to weapon\n';
           helpMessage += '!devsetserverwideflag <flagname> <value> - Set server-wide flag via SFTP\n';
+          helpMessage += '!devsetglobalflag <flagname> <true|false> - Set global flag via SFTP\n';
           helpMessage += '```\n';
           helpMessage += '**Note:** All commands require @admin or @developer role.';
           return message.channel.send(helpMessage);
@@ -1169,6 +1170,27 @@ export class DiscordBot {
           }
         }
 
+        else if (devCommand === 'setglobalflag') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devsetglobalflag <flagname> <true|false>`');
+          }
+          const flagName = args[0];
+          const value = args[1];
+
+          if (value !== 'true' && value !== 'false') {
+            return message.channel.send('❌ Value must be either "true" or "false".');
+          }
+
+          try {
+            const flagUpdates = {};
+            flagUpdates[flagName] = value === 'true';
+            await this.sftpLogReader.updateGlobalFlags(flagUpdates);
+            message.channel.send(`✅ Set global flag '${flagName}' to ${value} via SFTP`);
+          } catch (error) {
+            message.channel.send(`❌ Error updating global flag: ${error.message}`);
+          }
+        }
+
         else {
           message.channel.send(`❌ Unknown developer command: ${devCommand}. Use \`!devhelp\` to see available commands.`);
         }
@@ -1183,7 +1205,7 @@ export class DiscordBot {
     // Since WIB is UTC+7, we need to schedule at 05:00 UTC
     cron.schedule('0 5 * * *', async () => {
       try {
-        console.log('🕐 Running daily supply run reset at 12:00 WIB...');
+        console.log('🕐 Running daily flag run reset at 12:00 WIB...');
 
         // Update server flags directly via SFTP
         const flagUpdates = {
@@ -1208,7 +1230,38 @@ export class DiscordBot {
       timezone: 'Asia/Jakarta' // WIB timezone
     });
 
-    console.log('📅 Cron job scheduled: Daily supply run reset at 12:00 WIB (via SFTP)');
+    // Daily tank flags reset at 12:00 WIB (UTC+7)
+    // Reset daily tank flags to false every day
+    cron.schedule('0 5 * * *', async () => {
+      try {
+        console.log('🕐 Running daily tank flags reset at 12:00 WIB...');
+
+        // Update global flags directly via SFTP
+        const tankFlagUpdates = {
+          daily_tankWB02_flag: false,
+          daily_tankWB01_flag: false
+        };
+
+        await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
+        console.log('🎯 Daily tank flags reset completed successfully via SFTP!');
+
+        // Optionally send a server message to notify players
+        try {
+          await this.wrappedRconClient.send('servermsg "Daily tank events have been reset! Tank spawns are now available again."');
+        } catch (msgError) {
+          console.warn('Could not send tank reset server message:', msgError.message);
+        }
+
+      } catch (error) {
+        console.error('❌ Error during daily tank flags reset:', error);
+      }
+    }, {
+      timezone: 'Asia/Jakarta' // WIB timezone
+    });
+
+    console.log('📅 Cron jobs scheduled:');
+    console.log('   - Daily supply run reset at 12:00 WIB (via SFTP)');
+    console.log('   - Daily tank flags reset at 12:00 WIB (via SFTP)');
   }
 
   // Make sure to clean up when the bot is shutting down
