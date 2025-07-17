@@ -47,6 +47,14 @@ export class DiscordBot {
 
     // Store RCON client reference for cron jobs
     this.wrappedRconClient = null;
+
+    // Add cron job execution tracking
+    this.lastCronExecution = {
+      supplyRun: null,
+      tankFlags: null,
+      supplyRunSuccess: false,
+      tankFlagsSuccess: false
+    };
   }
 
   async login() {
@@ -96,7 +104,7 @@ export class DiscordBot {
     // Set up a new heartbeat interval
     this.rconHeartbeatInterval = setInterval(async () => {
       try {
-        console.log('Sending RCON heartbeat...');
+        console.log('Sending RCON heartbeat... );');
         await this.sendRconCommand('players');
         console.log('RCON heartbeat successful');
       } catch (error) {
@@ -105,7 +113,7 @@ export class DiscordBot {
       }
     }, this.heartbeatIntervalTime);
 
-    console.log(`RCON heartbeat started, interval: ${this.heartbeatIntervalTime / 1000} seconds`);
+    console.log(`RCON heartbeat started, interval: ${this.heartbeatIntervalTime / 1000} seconds - Current server time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })}`);
   }
 
   async sendRconCommand(command) {
@@ -580,6 +588,122 @@ export class DiscordBot {
           message.channel.send(`Error fetching playtime data: ${err.message}`);
           console.error('Error in !topplaytime:', err);
         }
+      } else if (command === 'cronstatus') {
+        // Check if user has admin or developer role
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to check cron job status.');
+        }
+
+        const now = new Date();
+        const wibTime = now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+
+        let statusMessage = `**🕰️ Cron Job Status Report**\n`;
+        statusMessage += `**Current Time (WIB):** ${wibTime}\n\n`;
+
+        // Supply Run Status
+        if (this.lastCronExecution.supplyRun) {
+          const lastSupplyRun = this.lastCronExecution.supplyRun.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+          const supplyStatus = this.lastCronExecution.supplyRunSuccess ? '✅ SUCCESS' : '❌ FAILED';
+          statusMessage += `**Supply Run Reset:**\n`;
+          statusMessage += `└ Last Execution: ${lastSupplyRun}\n`;
+          statusMessage += `└ Status: ${supplyStatus}\n\n`;
+        } else {
+          statusMessage += `**Supply Run Reset:**\n`;
+          statusMessage += `└ Status: ⏳ Not executed yet today\n\n`;
+        }
+
+        // Tank Flags Status
+        if (this.lastCronExecution.tankFlags) {
+          const lastTankFlags = this.lastCronExecution.tankFlags.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+          const tankStatus = this.lastCronExecution.tankFlagsSuccess ? '✅ SUCCESS' : '❌ FAILED';
+          statusMessage += `**Tank Flags Reset:**\n`;
+          statusMessage += `└ Last Execution: ${lastTankFlags}\n`;
+          statusMessage += `└ Status: ${tankStatus}\n\n`;
+        } else {
+          statusMessage += `**Tank Flags Reset:**\n`;
+          statusMessage += `└ Status: ⏳ Not executed yet today\n\n`;
+        }
+
+        statusMessage += `**Next Scheduled Execution:** Supply run at 12:01 PM WIB, Tank flags at 12:02 PM WIB\n`;
+        statusMessage += `**Timezone:** Asia/Jakarta (UTC+7)`;
+
+        message.channel.send(statusMessage);
+      } else if (command === 'testcron') {
+        // Check if user has admin or developer role
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to test cron jobs.');
+        }
+
+        if (args.length < 1) {
+          return message.channel.send('❌ Usage: `!testcron <supply|tank|both>` - Manually trigger cron job for testing');
+        }
+
+        const jobType = args[0].toLowerCase();
+        const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+
+        if (jobType === 'supply' || jobType === 'both') {
+          try {
+            await message.channel.send('🧪 **Testing Supply Run Reset...**');
+
+            const flagUpdates = {
+              supplyRunAvailableFlag: 1,
+              supplyRunCompleted: 0
+            };
+
+            await this.sftpLogReader.updateMultipleServerFlags(flagUpdates);
+
+            this.lastCronExecution.supplyRun = new Date();
+            this.lastCronExecution.supplyRunSuccess = true;
+
+            await message.channel.send('✅ **Supply Run Reset Test Completed Successfully!**');
+
+            // Send server message
+            try {
+              await this.wrappedRconClient.send('servermsg "Supply Run has been reset! (Manual Test) New supply runs are now available."');
+            } catch (msgError) {
+              console.warn('Could not send server message:', msgError.message);
+            }
+
+          } catch (error) {
+            this.lastCronExecution.supplyRun = new Date();
+            this.lastCronExecution.supplyRunSuccess = false;
+            await message.channel.send(`❌ **Supply Run Reset Test Failed:** ${error.message}`);
+          }
+        }
+
+        if (jobType === 'tank' || jobType === 'both') {
+          try {
+            await message.channel.send('🧪 **Testing Tank Flags Reset...**');
+
+            const tankFlagUpdates = {
+              daily_tankWB02_flag: false,
+              daily_tankWB01_flag: false
+            };
+
+            await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
+
+            this.lastCronExecution.tankFlags = new Date();
+            this.lastCronExecution.tankFlagsSuccess = true;
+
+            await message.channel.send('✅ **Tank Flags Reset Test Completed Successfully!**');
+
+            // Send server message
+            try {
+              await this.wrappedRconClient.send('servermsg "Daily tank events have been reset! (Manual Test) Tank spawns are now available again."');
+            } catch (msgError) {
+              console.warn('Could not send tank reset server message:', msgError.message);
+            }
+
+          } catch (error) {
+            this.lastCronExecution.tankFlags = new Date();
+            this.lastCronExecution.tankFlagsSuccess = false;
+            await message.channel.send(`❌ **Tank Flags Reset Test Failed:** ${error.message}`);
+          }
+        }
+
+        if (jobType !== 'supply' && jobType !== 'tank' && jobType !== 'both') {
+          return message.channel.send('❌ Invalid job type. Use: `!testcron <supply|tank|both>`');
+        }
       } else if (command === 'help') {
         const prefix = config.discord.prefix;
 
@@ -617,7 +741,9 @@ export class DiscordBot {
         helpMessage += '**Admin Commands:**\n';
         helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
         helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
-        helpMessage += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n\n`;
+        helpMessage += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n`;
+        helpMessage += `\`${prefix}cronstatus\` - Check cron job execution status (requires @admin/@developer role)\n`;
+        helpMessage += `\`${prefix}testcron <supply|tank|both>\` - Manually test cron jobs (requires @admin/@developer role)\n\n`;
 
         helpMessage += '**Note:** Server commands may take a moment to process depending on server load.';
 
@@ -1030,8 +1156,16 @@ export class DiscordBot {
           helpMessage += '!devenchant <username> <minDMG> <maxDMG> <enchant> <name> - Apply enchantment to weapon\n';
           helpMessage += '!devsetserverwideflag <flagname> <value> - Set server-wide flag via SFTP\n';
           helpMessage += '!devsetglobalflag <flagname> <true|false> - Set global flag via SFTP\n';
+          helpMessage += '```\n\n';
+          helpMessage += '**🕰️ Cron Job Management:**\n';
           helpMessage += '```\n';
-          helpMessage += '**Note:** All commands require @admin or @developer role.';
+          helpMessage += '!cronstatus - Check cron job execution status and schedule\n';
+          helpMessage += '!testcron supply - Manually test supply run reset\n';
+          helpMessage += '!testcron tank - Manually test tank flags reset\n';
+          helpMessage += '!testcron both - Manually test both cron jobs\n';
+          helpMessage += '```\n';
+          helpMessage += '**Note:** All commands require @admin or @developer role.\n';
+          helpMessage += '**Schedule:** Supply run reset at 12:01 PM WIB, Tank flags reset at 12:02 PM WIB daily.';
           return message.channel.send(helpMessage);
         }
 
@@ -1200,12 +1334,13 @@ export class DiscordBot {
   }
 
   setupCronJobs() {
-    // Daily supply run reset at 12:00 WIB (UTC+7)
-    // Cron format: '0 12 * * *' means every day at 12:00
-    // Since WIB is UTC+7, we need to schedule at 05:00 UTC
-    cron.schedule('0 5 * * *', async () => {
+    // Daily supply run reset at 12:01 PM WIB (UTC+7)
+    // Cron format: '01 12 * * *' means every day at 12:01 PM
+    // Since WIB is UTC+7, we need to schedule at 05:01 UTC
+    cron.schedule('01 12 * * *', async () => {
+      const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
       try {
-        console.log('🕐 Running daily flag run reset at 12:00 WIB...');
+        console.log(`🕐 [${executionTime}] Running daily supply run reset at 12:01 PM WIB...`);
 
         // Update server flags directly via SFTP
         const flagUpdates = {
@@ -1214,7 +1349,14 @@ export class DiscordBot {
         };
 
         await this.sftpLogReader.updateMultipleServerFlags(flagUpdates);
-        console.log('🎯 Daily supply run reset completed successfully via SFTP!');
+        console.log(`✅ [${executionTime}] Daily supply run reset completed successfully via SFTP!`);
+
+        // Update tracking
+        this.lastCronExecution.supplyRun = new Date();
+        this.lastCronExecution.supplyRunSuccess = true;
+
+        // Send Discord notification
+        await this.sendCronNotification('supply run', true, executionTime);
 
         // Optionally send a server message to notify players
         try {
@@ -1224,17 +1366,21 @@ export class DiscordBot {
         }
 
       } catch (error) {
-        console.error('❌ Error during daily supply run reset:', error);
+        console.error(`❌ [${executionTime}] Error during daily supply run reset:`, error);
+        this.lastCronExecution.supplyRun = new Date();
+        this.lastCronExecution.supplyRunSuccess = false;
+        await this.sendCronNotification('supply run', false, executionTime, error.message);
       }
     }, {
       timezone: 'Asia/Jakarta' // WIB timezone
     });
 
-    // Daily tank flags reset at 12:00 WIB (UTC+7)
+    // Daily tank flags reset at 12:02 PM WIB (UTC+7)
     // Reset daily tank flags to false every day
-    cron.schedule('0 5 * * *', async () => {
+    cron.schedule('02 12 * * *', async () => {
+      const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
       try {
-        console.log('🕐 Running daily tank flags reset at 12:00 WIB...');
+        console.log(`🕐 [${executionTime}] Running daily tank flags reset at 12:02 PM WIB...`);
 
         // Update global flags directly via SFTP
         const tankFlagUpdates = {
@@ -1243,7 +1389,14 @@ export class DiscordBot {
         };
 
         await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
-        console.log('🎯 Daily tank flags reset completed successfully via SFTP!');
+        console.log(`✅ [${executionTime}] Daily tank flags reset completed successfully via SFTP!`);
+
+        // Update tracking
+        this.lastCronExecution.tankFlags = new Date();
+        this.lastCronExecution.tankFlagsSuccess = true;
+
+        // Send Discord notification
+        await this.sendCronNotification('tank flags', true, executionTime);
 
         // Optionally send a server message to notify players
         try {
@@ -1253,15 +1406,50 @@ export class DiscordBot {
         }
 
       } catch (error) {
-        console.error('❌ Error during daily tank flags reset:', error);
+        console.error(`❌ [${executionTime}] Error during daily tank flags reset:`, error);
+        this.lastCronExecution.tankFlags = new Date();
+        this.lastCronExecution.tankFlagsSuccess = false;
+        await this.sendCronNotification('tank flags', false, executionTime, error.message);
       }
     }, {
       timezone: 'Asia/Jakarta' // WIB timezone
     });
 
     console.log('📅 Cron jobs scheduled:');
-    console.log('   - Daily supply run reset at 12:00 WIB (via SFTP)');
-    console.log('   - Daily tank flags reset at 12:00 WIB (via SFTP)');
+    console.log(`   - Daily supply run reset at 12:01 PM WIB (via SFTP) - Current server time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })}`);
+    console.log('   - Daily tank flags reset at 12:02 PM WIB (via SFTP)');
+  }
+
+  async sendCronNotification(jobType, success, executionTime, errorMessage = null) {
+    try {
+      // Try to find a logs or monitoring channel
+      const logChannels = ['logs', 'monitoring', 'admin-logs', 'bot-logs'];
+      let logChannel = null;
+
+      for (const channelName of logChannels) {
+        logChannel = this.client.channels.cache.find(channel =>
+          channel.name.toLowerCase().includes(channelName) && channel.type === 0
+        );
+        if (logChannel) break;
+      }
+
+      if (logChannel) {
+        const statusEmoji = success ? '✅' : '❌';
+        const statusText = success ? 'SUCCESS' : 'FAILED';
+
+        let message = `${statusEmoji} **Cron Job ${statusText}**\n`;
+        message += `**Job Type:** ${jobType}\n`;
+        message += `**Execution Time:** ${executionTime}\n`;
+
+        if (!success && errorMessage) {
+          message += `**Error:** ${errorMessage}\n`;
+        }
+
+        await logChannel.send(message);
+      }
+    } catch (notificationError) {
+      console.error('Failed to send cron notification to Discord:', notificationError.message);
+    }
   }
 
   // Make sure to clean up when the bot is shutting down
