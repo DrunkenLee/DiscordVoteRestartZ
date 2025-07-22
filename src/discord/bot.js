@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
 import { BattleMetricsAPI } from '../utils/battlemetrics.js';
 import config from '../config/config.js';
 import { SftpLogReader } from '../utils/sftpLogReader.js';
@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import * as zmUsersDb from '../utils/zmUsersDb.js';
 import cron from 'node-cron';
 dotenv.config();
+import RPC from 'discord-rpc';
 
 export class DiscordBot {
   constructor(token) {
@@ -55,10 +56,90 @@ export class DiscordBot {
       supplyRunSuccess: false,
       tankFlagsSuccess: false
     };
+
+    // Set up client presence when ready
+    this.client.once(Events.ClientReady, () => {
+      console.log(`Bot logged in as ${this.client.user.tag}`);
+
+      // Set a rich presence for the bot
+      this.client.user.setPresence({
+        activities: [{
+          name: 'Zona Merah Project Z',
+          type: ActivityType.Playing,
+          state: 'Surviving in Raven Creek',
+          details: 'Watching for zombies',
+          assets: {
+            largeImageKey: 'game_logo',
+            largeImageText: 'Zona Merah Project Z',
+            smallImageKey: 'character_icon',
+            smallImageText: 'Admin Bot'
+          }
+        }],
+        status: 'online'
+      });
+    });
   }
 
   async login() {
-    return this.client.login(this.token);
+    await this.client.login(this.token);
+    this.setupRichPresence();
+    return true;
+  }
+
+  setupRichPresence() {
+
+  const clientId = '1359414378692087838';
+
+  const rpc = new RPC.Client({ transport: 'ipc' });
+
+  rpc.on('ready', () => {
+    console.log('Discord Rich Presence connected');
+
+    // Set the rich presence
+    rpc.setActivity({
+      details: 'Managing Zona Merah Server',
+      state: 'Players online: Checking...',
+      startTimestamp: new Date(),
+      largeImageKey: 'game_logo',
+      largeImageText: 'Zona Merah Project Z',
+      smallImageKey: 'character_icon',
+      smallImageText: 'Admin Bot',
+      instance: false,
+      buttons: [
+        { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
+        { label: 'Server Info', url: 'https://your-website.com' }
+      ]
+    });
+
+    // Update the presence every 5 minutes with server info
+    setInterval(async () => {
+      try {
+        const playersResponse = await this.wrappedRconClient.send('players');
+        const playerCount = playersResponse ?
+          playersResponse.split('\n').filter(line => line.trim()).length :
+          0;
+
+        rpc.setActivity({
+          details: 'Managing Zona Merah Server',
+          state: `Players online: ${playerCount}`,
+          startTimestamp: new Date(),
+          largeImageKey: 'game_logo',
+          largeImageText: 'Zona Merah Project Z',
+          smallImageKey: 'character_icon',
+          smallImageText: 'Admin Bot',
+          instance: false,
+          buttons: [
+            { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
+            { label: 'Server Info', url: 'https://your-website.com' }
+          ]
+        });
+      } catch (error) {
+        console.error('Failed to update rich presence:', error);
+      }
+    }, 5 * 60 * 1000);
+  });
+
+  rpc.login({ clientId }).catch(console.error);
   }
 
   setupRconConnection(rconClient) {
