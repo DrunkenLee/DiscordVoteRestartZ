@@ -17,6 +17,7 @@
   "description": "A Node.js project for integrating Project Zomboid RCON with Discord.",
   "dependencies": {
     "config": "^3.3.9",
+    "discord-rpc": "^4.0.1",
     "discord.js": "^14.0.0",
     "dotenv": "^10.0.0",
     "node-cron": "^3.0.3",

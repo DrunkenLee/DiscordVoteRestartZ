@@ -1,0 +1,85 @@
+Distro Details
+==================================================================================================================================================================================================================
+Date:         Tue May 27 02:31:40 UTC 2025
+Distro:       Ubuntu 22.04.5 LTS
+Arch:         x86_64
+Kernel:       5.15.0-139-generic
+Hostname:     ns5020469
+Environment:  none
+Uptime:       13d, 19h, 58m
+tmux:         3.2a
+glibc:        2.35
+
+Server Resource
+==================================================================================================================================================================================================================
+CPU
+Model:      AMD Ryzen 5 5600X 6-Core Processor
+Cores:      12
+Frequency:  2800.000MHz
+Avg Load:   0.18, 0.31, 0.35
+
+Memory
+Mem:       total  used   free    cached  available
+Physical:  32GB   1.8GB  24GB    15GB    24GB
+Swap:      1.0GB  7.0MB  1017MB
+
+Storage
+Filesystem:  /dev/md3
+Total:       467G
+Used:        22G
+Available:   422G
+
+Network
+IP:           0.0.0.0
+Internet IP:  15.235.181.58
+
+Project Zomboid Resource Usage
+==================================================================================================================================================================================================================
+CPU Used:  24%
+Mem Used:  54.9%  17579MB
+
+Storage
+Total:        17G
+Serverfiles:  13G
+
+Project Zomboid Server Details
+==================================================================================================================================================================================================================
+Server name:      [SEA] - Zona Merah S3 | The Forgotten Legacy
+App ID:           380870
+Server IP:        0.0.0.0:16266
+Internet IP:      15.235.181.58:16266
+Server password:  NOT SET
+RCON password:    z!nD@yR3tM%k
+Admin password:   CHANGE_ME
+Maxplayers:       40
+Status:           STARTED
+Query Check:      https://ismygameserver.online/valve/15.235.181.58:16266
+
+pzserver Script Details
+==================================================================================================================================================================================================================
+Script name:       pzserver
+LinuxGSM version:  v25.1.5
+glibc required:    2.15
+IFTTT alert:       off
+Update on start:   off
+User:              ubuntu
+Location:          /home/ubuntu
+Config file:       /home/ubuntu/Zomboid/Server/pzserver.ini
+
+Backups
+==================================================================================================================================================================================================================
+No Backups created
+
+Ports
+==================================================================================================================================================================================================================
+Change ports by editing the parameters in:
+/home/ubuntu/Zomboid/Server/pzserver.ini
+
+Useful port diagnostic command:
+ss -tuplwn | grep start-server-jm
+
+DESCRIPTION  PORT   PROTOCOL  LISTEN
+Game         16266  udp       1
+Query        16266  udp       1
+
+Status: STARTED
