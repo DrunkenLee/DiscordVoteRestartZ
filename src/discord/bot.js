@@ -1466,7 +1466,8 @@ export class DiscordBot {
         // Update global flags directly via SFTP
         const tankFlagUpdates = {
           daily_tankWB02_flag: false,
-          daily_tankWB01_flag: false
+          daily_tankWB01_flag: false,
+          supplyRun_Jessica_taken: false
         };
 
         await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
@@ -1477,7 +1478,7 @@ export class DiscordBot {
         this.lastCronExecution.tankFlagsSuccess = true;
 
         // Send Discord notification
-        await this.sendCronNotification('tank flags', true, executionTime);
+        await this.sendCronNotification('global flags', true, executionTime);
 
         // Optionally send a server message to notify players
         try {
@@ -1490,7 +1491,7 @@ export class DiscordBot {
         console.error(`❌ [${executionTime}] Error during daily tank flags reset:`, error);
         this.lastCronExecution.tankFlags = new Date();
         this.lastCronExecution.tankFlagsSuccess = false;
-        await this.sendCronNotification('tank flags', false, executionTime, error.message);
+        await this.sendCronNotification('global flags', false, executionTime, error.message);
       }
     }, {
       timezone: 'Asia/Jakarta' // WIB timezone
