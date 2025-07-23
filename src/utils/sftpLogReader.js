@@ -313,8 +313,8 @@ eventDescription=""`;
     ["weekly_test01_flag"] = true,
     ["weekly_test02_flag"] = true,
     ["supplyRun_Jessica_taken"] = true,
-}`;
-      }
+    }`;
+    }
 
       // Update each flag in the Lua format
       for (const [flagName, value] of Object.entries(flagUpdates)) {

@@ -758,7 +758,8 @@ export class DiscordBot {
 
             const tankFlagUpdates = {
               daily_tankWB02_flag: false,
-              daily_tankWB01_flag: false
+              daily_tankWB01_flag: false,
+              supplyRun_Jessica_taken: false
             };
 
             await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
