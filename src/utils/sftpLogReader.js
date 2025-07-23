@@ -312,6 +312,7 @@ eventDescription=""`;
     ["daily_tankWB01_flag"] = true,
     ["weekly_test01_flag"] = true,
     ["weekly_test02_flag"] = true,
+    ["supplyRun_Jessica_taken"] = true,
 }`;
       }
 

@@ -1464,13 +1464,13 @@ export class DiscordBot {
         console.log(`🕐 [${executionTime}] Running daily global flags reset at 12:02 PM WIB...`);
 
         // Update global flags directly via SFTP
-        const tankFlagUpdates = {
+        const globalFlagUpdates = {
           daily_tankWB02_flag: false,
           daily_tankWB01_flag: false,
           supplyRun_Jessica_taken: false
         };
 
-        await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
+        await this.sftpLogReader.updateGlobalFlags(globalFlagUpdates);
         console.log(`✅ [${executionTime}] Daily global flags reset completed successfully via SFTP!`);
 
         // Update tracking
