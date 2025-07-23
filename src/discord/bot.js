@@ -693,19 +693,19 @@ export class DiscordBot {
           statusMessage += `└ Status: ⏳ Not executed yet today\n\n`;
         }
 
-        // Tank Flags Status
+        // global flags Status
         if (this.lastCronExecution.tankFlags) {
           const lastTankFlags = this.lastCronExecution.tankFlags.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
           const tankStatus = this.lastCronExecution.tankFlagsSuccess ? '✅ SUCCESS' : '❌ FAILED';
-          statusMessage += `**Tank Flags Reset:**\n`;
+          statusMessage += `**global flags Reset:**\n`;
           statusMessage += `└ Last Execution: ${lastTankFlags}\n`;
           statusMessage += `└ Status: ${tankStatus}\n\n`;
         } else {
-          statusMessage += `**Tank Flags Reset:**\n`;
+          statusMessage += `**global flags Reset:**\n`;
           statusMessage += `└ Status: ⏳ Not executed yet today\n\n`;
         }
 
-        statusMessage += `**Next Scheduled Execution:** Supply run at 12:01 PM WIB, Tank flags at 12:02 PM WIB\n`;
+        statusMessage += `**Next Scheduled Execution:** Supply run at 12:01 PM WIB, global flags at 12:02 PM WIB\n`;
         statusMessage += `**Timezone:** Asia/Jakarta (UTC+7)`;
 
         message.channel.send(statusMessage);
@@ -754,7 +754,7 @@ export class DiscordBot {
 
         if (jobType === 'tank' || jobType === 'both') {
           try {
-            await message.channel.send('🧪 **Testing Tank Flags Reset...**');
+            await message.channel.send('🧪 **Testing global flags Reset...**');
 
             const tankFlagUpdates = {
               daily_tankWB02_flag: false,
@@ -766,7 +766,7 @@ export class DiscordBot {
             this.lastCronExecution.tankFlags = new Date();
             this.lastCronExecution.tankFlagsSuccess = true;
 
-            await message.channel.send('✅ **Tank Flags Reset Test Completed Successfully!**');
+            await message.channel.send('✅ **global flags Reset Test Completed Successfully!**');
 
             // Send server message
             try {
@@ -778,7 +778,7 @@ export class DiscordBot {
           } catch (error) {
             this.lastCronExecution.tankFlags = new Date();
             this.lastCronExecution.tankFlagsSuccess = false;
-            await message.channel.send(`❌ **Tank Flags Reset Test Failed:** ${error.message}`);
+            await message.channel.send(`❌ **global flags Reset Test Failed:** ${error.message}`);
           }
         }
 
@@ -1242,11 +1242,11 @@ export class DiscordBot {
           helpMessage += '```\n';
           helpMessage += '!cronstatus - Check cron job execution status and schedule\n';
           helpMessage += '!testcron supply - Manually test supply run reset\n';
-          helpMessage += '!testcron tank - Manually test tank flags reset\n';
+          helpMessage += '!testcron tank - Manually test global flags reset\n';
           helpMessage += '!testcron both - Manually test both cron jobs\n';
           helpMessage += '```\n';
           helpMessage += '**Note:** All commands require @admin or @developer role.\n';
-          helpMessage += '**Schedule:** Supply run reset at 12:01 PM WIB, Tank flags reset at 12:02 PM WIB daily.';
+          helpMessage += '**Schedule:** Supply run reset at 12:01 PM WIB, global flags reset at 12:02 PM WIB daily.';
           return message.channel.send(helpMessage);
         }
 
@@ -1456,12 +1456,12 @@ export class DiscordBot {
       timezone: 'Asia/Jakarta' // WIB timezone
     });
 
-    // Daily tank flags reset at 12:02 PM WIB (UTC+7)
-    // Reset daily tank flags to false every day
+    // Daily global flags reset at 12:02 PM WIB (UTC+7)
+    // Reset daily global flags to false every day
     cron.schedule('02 12 * * *', async () => {
       const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
       try {
-        console.log(`🕐 [${executionTime}] Running daily tank flags reset at 12:02 PM WIB...`);
+        console.log(`🕐 [${executionTime}] Running daily global flags reset at 12:02 PM WIB...`);
 
         // Update global flags directly via SFTP
         const tankFlagUpdates = {
@@ -1471,7 +1471,7 @@ export class DiscordBot {
         };
 
         await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
-        console.log(`✅ [${executionTime}] Daily tank flags reset completed successfully via SFTP!`);
+        console.log(`✅ [${executionTime}] Daily global flags reset completed successfully via SFTP!`);
 
         // Update tracking
         this.lastCronExecution.tankFlags = new Date();
@@ -1488,7 +1488,7 @@ export class DiscordBot {
         }
 
       } catch (error) {
-        console.error(`❌ [${executionTime}] Error during daily tank flags reset:`, error);
+        console.error(`❌ [${executionTime}] Error during daily global flags reset:`, error);
         this.lastCronExecution.tankFlags = new Date();
         this.lastCronExecution.tankFlagsSuccess = false;
         await this.sendCronNotification('global flags', false, executionTime, error.message);
@@ -1499,7 +1499,7 @@ export class DiscordBot {
 
     console.log('📅 Cron jobs scheduled:');
     console.log(`   - Daily supply run reset at 12:01 PM WIB (via SFTP) - Current server time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })}`);
-    console.log('   - Daily tank flags reset at 12:02 PM WIB (via SFTP)');
+    console.log('   - Daily global flags reset at 12:02 PM WIB (via SFTP)');
   }
 
   async sendCronNotification(jobType, success, executionTime, errorMessage = null) {
