@@ -43,7 +43,7 @@ export class SftpLogReader {
   async findLatestLogFile() {
     await this.connect();
     // Directly return the known log file path
-    return '/home/ubuntu/Zomboid/server-console.txt';
+    return '/home/pzserver/Zomboid/server-console.txt';
   }
 
   async checkForModUpdates() {
@@ -95,7 +95,7 @@ export class SftpLogReader {
   async getKillBoard(filename) {
     try {
       await this.connect();
-      const iniPath = `/home/ubuntu/Zomboid/Lua/${filename}`;
+      const iniPath = `/home/pzserver/Zomboid/Lua/${filename}`;
       const iniContent = await this.sftp.get(iniPath);
       const lines = iniContent.toString().split('\n');
       const killCounts = [];
@@ -130,7 +130,7 @@ export class SftpLogReader {
   async getServerPointDepositByUsername(username) {
     try {
       await this.connect();
-      const iniPath = `/home/ubuntu/Zomboid/Lua/Deposits/${username}_deposits.ini`;
+      const iniPath = `/home/pzserver/Zomboid/Lua/Deposits/${username}_deposits.ini`;
       const iniContent = await this.sftp.get(iniPath);
       const lines = iniContent.toString().split('\n');
       let total = 0;
@@ -155,7 +155,7 @@ export class SftpLogReader {
   async getRaidPointsDepositByUsername(username) {
     try {
       await this.connect();
-      const iniPath = `/home/ubuntu/Zomboid/Lua/RaidDeposits/${username}_raiddeposits.ini`;
+      const iniPath = `/home/pzserver/Zomboid/Lua/RaidDeposits/${username}_raiddeposits.ini`;
       const iniContent = await this.sftp.get(iniPath);
       const lines = iniContent.toString().split('\n');
       let total = 0;
@@ -181,7 +181,7 @@ export class SftpLogReader {
     try {
       await this.connect();
 
-      const flagsFilePath = '/home/ubuntu/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
+      const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
 
       // Read current file content
       let fileContent;
@@ -238,7 +238,7 @@ eventDescription=""`;
     try {
       await this.connect();
 
-      const flagsFilePath = '/home/ubuntu/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
+      const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
 
       // Read current file content
       let fileContent;
@@ -297,7 +297,7 @@ eventDescription=""`;
     try {
       await this.connect();
 
-      const globalFlagsFilePath = '/home/ubuntu/Zomboid/Lua/ZMData/ZM_GlobalFlags.lua';
+      const globalFlagsFilePath = '/home/pzserver/Zomboid/Lua/ZMData/ZM_GlobalFlags.lua';
 
       // Read current file content
       let fileContent;

@@ -67,9 +67,16 @@ export class BotLuaCommandManager {
       const now = new Date();
       const wibTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' }));
       const currentHour = wibTime.getHours();
+      const currentMinute = wibTime.getMinutes();
+
+      // ADD DEBUGGING - Always log current status
+      console.log(`🕐 [DEBUG] Current WIB time: ${wibTime.toLocaleString()}`);
+      console.log(`🕐 [DEBUG] Current hour: ${currentHour}, Current minute: ${currentMinute}`);
+      console.log(`🕐 [DEBUG] isActive status: ${this.isActive}`);
 
       // Check if current time is between 7 PM (19:00) and 12 AM (24:00/0:00)
       const isInTimeRange = currentHour >= 19 || currentHour === 0;
+      console.log(`🕐 [DEBUG] isInTimeRange: ${isInTimeRange} (currentHour >= 19: ${currentHour >= 19}, currentHour === 0: ${currentHour === 0})`);
 
       if (isInTimeRange) {
         if (!this.isActive) {
@@ -87,12 +94,59 @@ export class BotLuaCommandManager {
         }
 
         // Execute the isolation zone horde check
-        console.log(`🔍 [${wibTime.toLocaleString()}] Executing isolation zone horde check...`);
+        console.log(`🔍 [${wibTime.toLocaleString()}] Starting isolation zone horde check...`);
 
         if (this.wrappedRconClient) {
           try {
-            await this.wrappedRconClient.send('luacmd clientexe checkIsolationZoneHorde');
-            console.log(`✅ [${wibTime.toLocaleString()}] Isolation zone horde check executed successfully`);
+            // Step 1: Get all players online
+            console.log(`👥 [${wibTime.toLocaleString()}] Checking for online players...`);
+            const playersResponse = await this.wrappedRconClient.send('players');
+
+            // Step 2: Parse player list and check if any players are online
+            const playerLines = playersResponse.split('\n').filter(line => line.trim() && !line.includes('Players connected'));
+            const onlinePlayers = [];
+
+            for (const line of playerLines) {
+              // Extract username from player line, removing any leading "-" character
+              // Format usually: "-admin (id=X)" or "-username1 (id=X)"
+              const match = line.match(/^-?([^\s(]+)/);
+              if (match) {
+                onlinePlayers.push(match[1]); // This will get "admin", "username1", "username2" without the "-"
+              }
+            }
+
+            console.log(`👥 [${wibTime.toLocaleString()}] Found ${onlinePlayers.length} players online: ${onlinePlayers.join(', ')}`);
+
+            // Step 3: If no players online, return early
+            if (onlinePlayers.length === 0) {
+              console.log(`⏸️ [${wibTime.toLocaleString()}] No players online - skipping isolation zone horde check`);
+              return;
+            }
+
+            // Step 4: Execute command for ALL players online
+            console.log(`🎯 [${wibTime.toLocaleString()}] Executing isolation zone horde check for all ${onlinePlayers.length} players...`);
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const player of onlinePlayers) {
+              try {
+                console.log(`🔄 [${wibTime.toLocaleString()}] Executing for player: ${player}`);
+                await this.wrappedRconClient.send(`luacmd clientexe ${player} checkIsolationZoneHorde`);
+                console.log(`✅ [${wibTime.toLocaleString()}] Successfully executed for player: ${player}`);
+                successCount++;
+
+                // Add a small delay between commands to avoid overwhelming the server
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+              } catch (playerError) {
+                console.error(`❌ [${wibTime.toLocaleString()}] Failed to execute for player ${player}:`, playerError.message);
+                errorCount++;
+              }
+            }
+
+            console.log(`📊 [${wibTime.toLocaleString()}] Isolation zone horde check completed - Success: ${successCount}/${onlinePlayers.length}, Errors: ${errorCount}`);
+
           } catch (rconError) {
             console.error(`❌ [${wibTime.toLocaleString()}] Error executing isolation zone command:`, rconError.message);
           }
@@ -100,6 +154,7 @@ export class BotLuaCommandManager {
           console.warn(`⚠️ [${wibTime.toLocaleString()}] RCON client not available for isolation zone check`);
         }
       } else {
+        console.log(`🕐 [DEBUG] Outside time range - no action taken`);
         if (this.isActive) {
           const exitMessage = `🌅 [${wibTime.toLocaleString()}] Exiting isolation zone active period (outside 7 PM - 12 AM WIB)`;
           console.log(exitMessage);
@@ -128,8 +183,59 @@ export class BotLuaCommandManager {
       console.log(`🧪 [${wibTime.toLocaleString()}] Manual isolation zone horde check triggered...`);
 
       if (this.wrappedRconClient) {
-        await this.wrappedRconClient.send('luacmd clientexe checkIsolationZoneHorde');
-        console.log(`✅ [${wibTime.toLocaleString()}] Manual isolation zone horde check completed`);
+        // Step 1: Get all players online
+        console.log(`👥 [${wibTime.toLocaleString()}] Checking for online players...`);
+        const playersResponse = await this.wrappedRconClient.send('players');
+
+        // Step 2: Parse player list and check if any players are online
+        const playerLines = playersResponse.split('\n').filter(line => line.trim() && !line.includes('Players connected'));
+        const onlinePlayers = [];
+
+        for (const line of playerLines) {
+          // Extract username from player line, removing any leading "-" character
+          // Format usually: "-admin (id=X)" or "-username1 (id=X)"
+          const match = line.match(/^-?([^\s(]+)/);
+          if (match) {
+            onlinePlayers.push(match[1]); // This will get "admin", "username1", "username2" without the "-"
+          }
+        }
+
+        console.log(`👥 [${wibTime.toLocaleString()}] Found ${onlinePlayers.length} players online: ${onlinePlayers.join(', ')}`);
+
+        // Step 3: If no players online, return early
+        if (onlinePlayers.length === 0) {
+          console.log(`⏸️ [${wibTime.toLocaleString()}] No players online - cannot execute isolation zone horde check`);
+          throw new Error('No players online - isolation zone check requires at least one player');
+        }
+
+        // Step 4: Execute command for ALL players online
+        console.log(`🎯 [${wibTime.toLocaleString()}] Executing manual isolation zone horde check for all ${onlinePlayers.length} players...`);
+
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const player of onlinePlayers) {
+          try {
+            console.log(`🔄 [${wibTime.toLocaleString()}] Executing for player: ${player}`);
+            await this.wrappedRconClient.send(`luacmd clientexe ${player} checkIsolationZoneHorde`);
+            console.log(`✅ [${wibTime.toLocaleString()}] Successfully executed for player: ${player}`);
+            successCount++;
+
+            // Add a small delay between commands to avoid overwhelming the server
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+          } catch (playerError) {
+            console.error(`❌ [${wibTime.toLocaleString()}] Failed to execute for player ${player}:`, playerError.message);
+            errorCount++;
+          }
+        }
+
+        console.log(`📊 [${wibTime.toLocaleString()}] Manual isolation zone horde check completed - Success: ${successCount}/${onlinePlayers.length}, Errors: ${errorCount}`);
+
+        if (errorCount > 0) {
+          throw new Error(`Some commands failed - Success: ${successCount}/${onlinePlayers.length}, Errors: ${errorCount}`);
+        }
+
         return true;
       } else {
         throw new Error('RCON client not available');

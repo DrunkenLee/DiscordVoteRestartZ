@@ -1449,6 +1449,32 @@ export class DiscordBot {
         } catch (error) {
           await message.channel.send(`❌ **Isolation Zone Test Failed:** ${error.message}`);
         }
+      } else if (command === 'debugisolation') {
+        // Check if user has admin or developer role
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to debug isolation zone.');
+        }
+
+        try {
+          await message.channel.send('🔍 **Debugging Isolation Zone System...**');
+
+          // Force run the check immediately
+          await this.luaCommandManager.checkAndExecuteIsolationZone();
+
+          const status = this.luaCommandManager.getStatus();
+
+          let debugMessage = `**🔍 Debug Results:**\n`;
+          debugMessage += `**Current Time:** ${status.currentTime}\n`;
+          debugMessage += `**Current Hour:** ${status.currentHour}\n`;
+          debugMessage += `**In Time Range:** ${status.isInActiveTimeRange}\n`;
+          debugMessage += `**System Active:** ${status.isActive}\n`;
+          debugMessage += `**RCON Available:** ${this.luaCommandManager.wrappedRconClient ? 'Yes' : 'No'}\n`;
+          debugMessage += `**Discord Client:** ${this.luaCommandManager.discordClient ? 'Yes' : 'No'}`;
+
+          await message.channel.send(debugMessage);
+        } catch (error) {
+          await message.channel.send(`❌ **Debug Failed:** ${error.message}`);
+        }
       }
     });
   }
