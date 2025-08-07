@@ -8,22 +8,16 @@ import * as zmUsersDb from '../utils/zmUsersDb.js';
 import cron from 'node-cron';
 dotenv.config();
 import RPC from 'discord-rpc';
+import { BotLuaCommandManager } from './bot_luacmd.js';
 
 export class DiscordBot {
   constructor(token) {
     this.token = token || config.discord.token;
     this.client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-      ]
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
     });
 
-    this.battlemetrics = new BattleMetricsAPI(
-      config.battlemetrics.apiKey,
-      config.battlemetrics.serverId
-    );
+    this.battlemetrics = new BattleMetricsAPI(config.battlemetrics.apiKey, config.battlemetrics.serverId);
     this.sftpLogReader = new SftpLogReader();
 
     // Track the last restart time for cooldown
@@ -54,8 +48,11 @@ export class DiscordBot {
       supplyRun: null,
       tankFlags: null,
       supplyRunSuccess: false,
-      tankFlagsSuccess: false
+      tankFlagsSuccess: false,
     };
+
+    // Add lua command manager
+    this.luaCommandManager = new BotLuaCommandManager();
 
     // Set up client presence when ready
     this.client.once(Events.ClientReady, () => {
@@ -63,19 +60,21 @@ export class DiscordBot {
 
       // Set a rich presence for the bot
       this.client.user.setPresence({
-        activities: [{
-          name: 'Zona Merah Project Z',
-          type: ActivityType.Playing,
-          state: 'Surviving in Raven Creek',
-          details: 'Watching for zombies',
-          assets: {
-            largeImageKey: 'game_logo',
-            largeImageText: 'Zona Merah Project Z',
-            smallImageKey: 'character_icon',
-            smallImageText: 'Admin Bot'
-          }
-        }],
-        status: 'online'
+        activities: [
+          {
+            name: 'Zona Merah Project Z',
+            type: ActivityType.Playing,
+            state: 'Surviving in Raven Creek',
+            details: 'Watching for zombies',
+            assets: {
+              largeImageKey: 'game_logo',
+              largeImageText: 'Zona Merah Project Z',
+              smallImageKey: 'character_icon',
+              smallImageText: 'Admin Bot',
+            },
+          },
+        ],
+        status: 'online',
       });
     });
   }
@@ -87,59 +86,56 @@ export class DiscordBot {
   }
 
   setupRichPresence() {
+    const clientId = '1359414378692087838';
 
-  const clientId = '1359414378692087838';
+    const rpc = new RPC.Client({ transport: 'ipc' });
 
-  const rpc = new RPC.Client({ transport: 'ipc' });
+    rpc.on('ready', () => {
+      console.log('Discord Rich Presence connected');
 
-  rpc.on('ready', () => {
-    console.log('Discord Rich Presence connected');
+      // Set the rich presence
+      rpc.setActivity({
+        details: 'Managing Zona Merah Server',
+        state: 'Players online: Checking...',
+        startTimestamp: new Date(),
+        largeImageKey: 'game_logo',
+        largeImageText: 'Zona Merah Project Z',
+        smallImageKey: 'character_icon',
+        smallImageText: 'Admin Bot',
+        instance: false,
+        buttons: [
+          { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
+          { label: 'Server Info', url: 'https://your-website.com' },
+        ],
+      });
 
-    // Set the rich presence
-    rpc.setActivity({
-      details: 'Managing Zona Merah Server',
-      state: 'Players online: Checking...',
-      startTimestamp: new Date(),
-      largeImageKey: 'game_logo',
-      largeImageText: 'Zona Merah Project Z',
-      smallImageKey: 'character_icon',
-      smallImageText: 'Admin Bot',
-      instance: false,
-      buttons: [
-        { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
-        { label: 'Server Info', url: 'https://your-website.com' }
-      ]
+      // Update the presence every 5 minutes with server info
+      setInterval(async () => {
+        try {
+          const playersResponse = await this.wrappedRconClient.send('players');
+          const playerCount = playersResponse ? playersResponse.split('\n').filter((line) => line.trim()).length : 0;
+
+          rpc.setActivity({
+            details: 'Managing Zona Merah Server',
+            state: `Players online: ${playerCount}`,
+            startTimestamp: new Date(),
+            largeImageKey: 'game_logo',
+            largeImageText: 'Zona Merah Project Z',
+            smallImageKey: 'character_icon',
+            smallImageText: 'Admin Bot',
+            instance: false,
+            buttons: [
+              { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
+              { label: 'Server Info', url: 'https://your-website.com' },
+            ],
+          });
+        } catch (error) {
+          console.error('Failed to update rich presence:', error);
+        }
+      }, 5 * 60 * 1000);
     });
 
-    // Update the presence every 5 minutes with server info
-    setInterval(async () => {
-      try {
-        const playersResponse = await this.wrappedRconClient.send('players');
-        const playerCount = playersResponse ?
-          playersResponse.split('\n').filter(line => line.trim()).length :
-          0;
-
-        rpc.setActivity({
-          details: 'Managing Zona Merah Server',
-          state: `Players online: ${playerCount}`,
-          startTimestamp: new Date(),
-          largeImageKey: 'game_logo',
-          largeImageText: 'Zona Merah Project Z',
-          smallImageKey: 'character_icon',
-          smallImageText: 'Admin Bot',
-          instance: false,
-          buttons: [
-            { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
-            { label: 'Server Info', url: 'https://your-website.com' }
-          ]
-        });
-      } catch (error) {
-        console.error('Failed to update rich presence:', error);
-      }
-    }, 5 * 60 * 1000);
-  });
-
-  rpc.login({ clientId }).catch(console.error);
+    rpc.login({ clientId }).catch(console.error);
   }
 
   setupRconConnection(rconClient) {
@@ -157,8 +153,12 @@ export class DiscordBot {
           console.error(`RCON command failed: ${error.message}`);
 
           // Try to reconnect and retry the command once
-          if (error.message.includes('WebSocket') || error.message.includes('ECONNRESET') ||
-              error.message.includes('not connected') || error.message.toLowerCase().includes('timeout')) {
+          if (
+            error.message.includes('WebSocket') ||
+            error.message.includes('ECONNRESET') ||
+            error.message.includes('not connected') ||
+            error.message.toLowerCase().includes('timeout')
+          ) {
             console.log('Connection issue detected, attempting to reconnect...');
 
             try {
@@ -172,7 +172,7 @@ export class DiscordBot {
 
           throw error;
         }
-      }
+      },
     };
   }
 
@@ -190,11 +190,15 @@ export class DiscordBot {
         console.log('RCON heartbeat successful');
       } catch (error) {
         console.error(`RCON heartbeat failed: ${error.message}`);
-        this.reconnectRcon().catch(e => console.error(`Failed to reconnect: ${e.message}`));
+        this.reconnectRcon().catch((e) => console.error(`Failed to reconnect: ${e.message}`));
       }
     }, this.heartbeatIntervalTime);
 
-    console.log(`RCON heartbeat started, interval: ${this.heartbeatIntervalTime / 1000} seconds - Current server time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })}`);
+    console.log(
+      `RCON heartbeat started, interval: ${this.heartbeatIntervalTime / 1000} seconds - Current server time: ${new Date().toLocaleString('en-US', {
+        timeZone: 'Asia/Jakarta',
+      })}`
+    );
   }
 
   async sendRconCommand(command) {
@@ -241,6 +245,9 @@ export class DiscordBot {
     // Store wrapped RCON client for cron jobs
     this.wrappedRconClient = wrappedRconClient;
 
+    // Initialize lua command manager
+    this.luaCommandManager.initialize(wrappedRconClient);
+
     // Setup cron jobs
     this.setupCronJobs();
 
@@ -257,8 +264,8 @@ export class DiscordBot {
       const command = args.shift().toLowerCase();
 
       // --- Development Mode Check ---
-      const isDeveloper = message.member && message.member.roles.cache.some(role => role.name.toLowerCase() === 'developer');
-      const isAdmin = message.member && message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin');
+      const isDeveloper = message.member && message.member.roles.cache.some((role) => role.name.toLowerCase() === 'developer');
+      const isAdmin = message.member && message.member.roles.cache.some((role) => role.name.toLowerCase() === 'admin');
 
       // If in dev mode, only allow developers and admins to use commands
       if (this.devMode && !isDeveloper && !isAdmin) {
@@ -273,11 +280,16 @@ export class DiscordBot {
 
         // Toggle dev mode
         this.devMode = !this.devMode;
-        return message.channel.send(`🔧 Development mode is now **${this.devMode ? 'ON' : 'OFF'}**. ${this.devMode ? 'Only developers and admins can use commands.' : 'All users can use commands.'}`);
+        return message.channel.send(
+          `🔧 Development mode is now **${this.devMode ? 'ON' : 'OFF'}**. ${
+            this.devMode ? 'Only developers and admins can use commands.' : 'All users can use commands.'
+          }`
+        );
       }
 
       // --- Cooldown check ---
-      if (!isAdmin) { // Admins are immune to cooldown
+      if (!isAdmin) {
+        // Admins are immune to cooldown
         const now = Date.now();
         const cooldownKey = `${message.author.id}:${command}`;
         if (this.commandCooldowns.has(cooldownKey)) {
@@ -317,9 +329,7 @@ export class DiscordBot {
             if (timeSinceLastRestart < this.restartCooldown) {
               const remainingTime = this.restartCooldown - timeSinceLastRestart;
               const remainingMinutes = Math.ceil(remainingTime / (60 * 1000));
-              return message.channel.send(
-                `Server restart is on cooldown. Please wait ${remainingMinutes} more minutes before restarting again.`
-              );
+              return message.channel.send(`Server restart is on cooldown. Please wait ${remainingMinutes} more minutes before restarting again.`);
             }
           }
 
@@ -332,7 +342,9 @@ export class DiscordBot {
               // Wait 2 minutes
               setTimeout(async () => {
                 // Second warning via RCON
-                await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"');
+                await wrappedRconClient.send(
+                  'servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"'
+                );
                 // Wait 1 more minute, then restart via SSH
                 setTimeout(async () => {
                   const sshConfig = {
@@ -343,20 +355,23 @@ export class DiscordBot {
                   };
                   const conn = new SSHClient();
                   await new Promise((resolve, reject) => {
-                    conn.on('ready', () => {
-                      conn.exec('./pzserver restart', (err, stream) => {
-                        if (err) {
-                          conn.end();
-                          return reject(err);
-                        }
-                        stream.on('close', () => {
-                          conn.end();
-                          resolve();
+                    conn
+                      .on('ready', () => {
+                        conn.exec('./pzserver restart', (err, stream) => {
+                          if (err) {
+                            conn.end();
+                            return reject(err);
+                          }
+                          stream.on('close', () => {
+                            conn.end();
+                            resolve();
+                          });
+                          stream.on('data', () => {});
+                          stream.stderr.on('data', () => {});
                         });
-                        stream.on('data', () => {});
-                        stream.stderr.on('data', () => {});
-                      });
-                    }).on('error', reject).connect(sshConfig);
+                      })
+                      .on('error', reject)
+                      .connect(sshConfig);
                   });
                   await message.channel.send('In-game warnings sent. Server will restart now.');
                   this.lastRestartTime = Date.now();
@@ -377,13 +392,13 @@ export class DiscordBot {
 
             const confirmMsg = await message.channel.send(
               `**Force Restart Requested!**\n` +
-              `This command is for emergency use only. If you want to restart for mod updates, please use \`!checkupdate\` instead.\n\n` +
-              `**${confirmedUsers.size}/5** confirms | **${canceledUsers.size}/1** cancels\n` +
-              `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
-              `**Note:** At least 5 different users must confirm, or 1 must cancel.`
+                `This command is for emergency use only. If you want to restart for mod updates, please use \`!checkupdate\` instead.\n\n` +
+                `**${confirmedUsers.size}/5** confirms | **${canceledUsers.size}/1** cancels\n` +
+                `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+                `**Note:** At least 5 different users must confirm, or 1 must cancel.`
             );
 
-            const filter = m => ['confirm', 'cancel'].includes(m.content.toLowerCase());
+            const filter = (m) => ['confirm', 'cancel'].includes(m.content.toLowerCase());
             const collector = message.channel.createMessageCollector({ filter, time: 120000 });
 
             collector.on('collect', async (m) => {
@@ -398,10 +413,10 @@ export class DiscordBot {
               // Update the confirmation message
               await confirmMsg.edit(
                 `**Force Restart Requested!**\n` +
-                `This command is for emergency use only. If you want to restart for mod updates, please use \`!checkupdate\` instead.\n\n` +
-                `**${confirmedUsers.size}/5** confirms | **${canceledUsers.size}/1** cancels\n` +
-                `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
-                `**Note:** At least 5 different users must confirm, or 1 must cancel.`
+                  `This command is for emergency use only. If you want to restart for mod updates, please use \`!checkupdate\` instead.\n\n` +
+                  `**${confirmedUsers.size}/5** confirms | **${canceledUsers.size}/1** cancels\n` +
+                  `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+                  `**Note:** At least 5 different users must confirm, or 1 must cancel.`
               );
 
               // If enough cancels, stop collector and cancel
@@ -423,7 +438,9 @@ export class DiscordBot {
                   // Wait 2 minutes
                   setTimeout(async () => {
                     // Second warning via RCON
-                    await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"');
+                    await wrappedRconClient.send(
+                      'servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"'
+                    );
                     // Wait 1 more minute, then restart via SSH
                     setTimeout(async () => {
                       const sshConfig = {
@@ -434,20 +451,23 @@ export class DiscordBot {
                       };
                       const conn = new SSHClient();
                       await new Promise((resolve, reject) => {
-                        conn.on('ready', () => {
-                          conn.exec('./pzserver restart', (err, stream) => {
-                            if (err) {
-                              conn.end();
-                              return reject(err);
-                            }
-                            stream.on('close', () => {
-                              conn.end();
-                              resolve();
+                        conn
+                          .on('ready', () => {
+                            conn.exec('./pzserver restart', (err, stream) => {
+                              if (err) {
+                                conn.end();
+                                return reject(err);
+                              }
+                              stream.on('close', () => {
+                                conn.end();
+                                resolve();
+                              });
+                              stream.on('data', () => {});
+                              stream.stderr.on('data', () => {});
                             });
-                            stream.on('data', () => {});
-                            stream.stderr.on('data', () => {});
-                          });
-                        }).on('error', reject).connect(sshConfig);
+                          })
+                          .on('error', reject)
+                          .connect(sshConfig);
                       });
                       await message.channel.send('In-game warnings sent. Server will restart now.');
                       this.lastRestartTime = Date.now();
@@ -489,10 +509,12 @@ export class DiscordBot {
                 await message.channel.send('In-game notification sent. Waiting 2 minutes before next warning...');
 
                 // Wait 2 minutes
-                await new Promise(resolve => setTimeout(resolve, 120000));
+                await new Promise((resolve) => setTimeout(resolve, 120000));
 
                 // Second warning via RCON
-                await wrappedRconClient.send('servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"');
+                await wrappedRconClient.send(
+                  'servermsg "SERVER RESTART IMMINENT: Saving world and restarting in 1 minute. Please finish what you\'re doing!"'
+                );
                 await message.channel.send('Final warning sent. Restarting server in 1 minute...');
 
                 // Wait 1 more minute, then restart via SSH
@@ -505,20 +527,23 @@ export class DiscordBot {
                   };
                   const conn = new SSHClient();
                   await new Promise((resolve, reject) => {
-                    conn.on('ready', () => {
-                      conn.exec('./pzserver restart', (err, stream) => {
-                        if (err) {
-                          conn.end();
-                          return reject(err);
-                        }
-                        stream.on('close', () => {
-                          conn.end();
-                          resolve();
+                    conn
+                      .on('ready', () => {
+                        conn.exec('./pzserver restart', (err, stream) => {
+                          if (err) {
+                            conn.end();
+                            return reject(err);
+                          }
+                          stream.on('close', () => {
+                            conn.end();
+                            resolve();
+                          });
+                          stream.on('data', () => {});
+                          stream.stderr.on('data', () => {});
                         });
-                        stream.on('data', () => {});
-                        stream.stderr.on('data', () => {});
-                      });
-                    }).on('error', reject).connect(sshConfig);
+                      })
+                      .on('error', reject)
+                      .connect(sshConfig);
                   });
                   await message.channel.send('Server restart command sent via SSH. Server will restart now.');
                   this.lastRestartTime = Date.now();
@@ -576,7 +601,7 @@ export class DiscordBot {
         }
       } else if (command === 'adduser') {
         // Check if user has admin role
-        if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
+        if (!message.member.roles.cache.some((role) => role.name.toLowerCase() === 'admin')) {
           return message.channel.send('❌ You need the @admin role to use this command.');
         }
 
@@ -604,7 +629,7 @@ export class DiscordBot {
               discordid: discordId,
               username1: username,
               password1: password,
-              extradata: `Added by ${message.author.tag} on ${new Date().toISOString()}`
+              extradata: `Added by ${message.author.tag} on ${new Date().toISOString()}`,
             });
 
             message.channel.send(`✅ User command executed: ${response || 'Command sent, but no response received.'} User also added to database.`);
@@ -628,7 +653,7 @@ export class DiscordBot {
         }
       } else if (command === 'removeuserfromwhitelist') {
         // Check if user has admin role
-        if (!message.member.roles.cache.some(role => role.name.toLowerCase() === 'admin')) {
+        if (!message.member.roles.cache.some((role) => role.name.toLowerCase() === 'admin')) {
           return message.channel.send('❌ You need the @admin role to use this command.');
         }
 
@@ -728,7 +753,7 @@ export class DiscordBot {
 
             const flagUpdates = {
               supplyRunAvailableFlag: 1,
-              supplyRunCompleted: 0
+              supplyRunCompleted: 0,
             };
 
             await this.sftpLogReader.updateMultipleServerFlags(flagUpdates);
@@ -744,7 +769,6 @@ export class DiscordBot {
             } catch (msgError) {
               console.warn('Could not send server message:', msgError.message);
             }
-
           } catch (error) {
             this.lastCronExecution.supplyRun = new Date();
             this.lastCronExecution.supplyRunSuccess = false;
@@ -759,7 +783,7 @@ export class DiscordBot {
             const tankFlagUpdates = {
               daily_tankWB02_flag: false,
               daily_tankWB01_flag: false,
-              supplyRun_Jessica_taken: false
+              supplyRun_Jessica_taken: false,
             };
 
             await this.sftpLogReader.updateGlobalFlags(tankFlagUpdates);
@@ -775,7 +799,6 @@ export class DiscordBot {
             } catch (msgError) {
               console.warn('Could not send tank reset server message:', msgError.message);
             }
-
           } catch (error) {
             this.lastCronExecution.tankFlags = new Date();
             this.lastCronExecution.tankFlagsSuccess = false;
@@ -789,47 +812,47 @@ export class DiscordBot {
       } else if (command === 'help') {
         const prefix = config.discord.prefix;
 
-        let helpMessage = '**🤖 Zona Merah Project Z - Command List 🤖**\n\n';
+        // General Commands Message
+        let generalCommands = '**🤖 Zona Merah Project Z - Command List 🤖**\n\n';
+        generalCommands += '**General Commands:**\n';
+        generalCommands += `\`${prefix}help\` - Shows this help message\n`;
+        generalCommands += `\`${prefix}ping\` - Check bot response time\n`;
+        generalCommands += `\`${prefix}players\` - Show currently online players\n`;
+        generalCommands += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
+        generalCommands += `\`${prefix}start\` - Start the server (requires confirmations or admin)\n`;
+        generalCommands += `\`${prefix}checkupdate\` - Check for mod updates\n`;
+        generalCommands += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
+        generalCommands += `\`${prefix}killboardrc\` - Display the top 10 killboard (Raven Creek Legend) \n`;
+        generalCommands += `\`${prefix}topplaytime\` - Display the top 10 players by playtime - (Under development)\n`;
+        generalCommands += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n`;
 
-        // General commands (no role requirements)
-        helpMessage += '**General Commands:**\n';
-        helpMessage += `\`${prefix}help\` - Shows this help message\n`;
-        helpMessage += `\`${prefix}ping\` - Check bot response time\n`;
-        helpMessage += `\`${prefix}players\` - Show currently online players\n`;
-        helpMessage += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
-        helpMessage += `\`${prefix}start\` - Start the server (requires confirmations or admin)\n`;
-        helpMessage += `\`${prefix}checkupdate\` - Check for mod updates\n`;
-        helpMessage += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
-        helpMessage += `\`${prefix}killboardrc\` - Display the top 10 killboard (Raven Creek Legend) \n`;
-        helpMessage += `\`${prefix}topplaytime\` - Display the top 10 players by playtime - (Under development)\n`;
-        helpMessage += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n\n`;
+        // Whitelist Commands Message
+        let whitelistCommands = '**Whitelist Commands:**\n';
+        whitelistCommands += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
+        whitelistCommands += `\`${prefix}resetpassword <oldpassword> <newpassword>\` - Reset your whitelist password. You must provide your current password. Your message will be deleted for security.\n\n`;
+        whitelistCommands += '**How to Whitelist:**\n';
+        whitelistCommands += '1. Use the command above with your SteamID64, desired username, and password.\n';
+        whitelistCommands += '2. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
+        whitelistCommands +=
+          '3. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n';
+        whitelistCommands += '**Note:** Please do whitelistrequest in the Support Ticket Channel, so your data is not **EXPOSED**.\n';
 
-        // Whitelist section
-        helpMessage += '**Whitelist Commands:**\n';
-        helpMessage += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
-        helpMessage += `\`${prefix}resetpassword <oldpassword> <newpassword>\` - Reset your whitelist password. You must provide your current password. Your message will be deleted for security.\n\n`;
+        // Wallet and Admin Commands Message
+        let otherCommands = '**S3 Wallet Commands:**\n';
+        otherCommands += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
+        otherCommands += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
+        otherCommands += '**Admin Commands:**\n';
+        otherCommands += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
+        otherCommands += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
+        otherCommands += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n`;
+        otherCommands += `\`${prefix}cronstatus\` - Check cron job execution status (requires @admin/@developer role)\n`;
+        otherCommands += `\`${prefix}testcron <supply|tank|both>\` - Manually test cron jobs (requires @admin/@developer role)\n\n`;
+        otherCommands += '**Note:** Server commands may take a moment to process depending on server load.';
 
-        // How to Whitelist section
-        helpMessage += '**How to Whitelist:**\n';
-        helpMessage += '1. Use the command above with your SteamID64, desired username, and password.\n';
-        helpMessage += '2. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
-        helpMessage += '3. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n\n';
-        helpMessage += '**Note:** Please do whitelistrequest in the Support Ticket Channel, so your data is not **EXPOSED**.\n\n';
-
-        helpMessage += '**S3 Wallet Commands:**\n';
-        helpMessage += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
-        helpMessage += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
-
-        helpMessage += '**Admin Commands:**\n';
-        helpMessage += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
-        helpMessage += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
-        helpMessage += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n`;
-        helpMessage += `\`${prefix}cronstatus\` - Check cron job execution status (requires @admin/@developer role)\n`;
-        helpMessage += `\`${prefix}testcron <supply|tank|both>\` - Manually test cron jobs (requires @admin/@developer role)\n\n`;
-
-        helpMessage += '**Note:** Server commands may take a moment to process depending on server load.';
-
-        message.channel.send(helpMessage);
+        // Send all messages
+        await message.channel.send(generalCommands);
+        await message.channel.send(whitelistCommands);
+        await message.channel.send(otherCommands);
       } else if (command === 'serverinfo') {
         try {
           const statusMsg = await message.channel.send('Fetching server info via SSH...');
@@ -846,27 +869,30 @@ export class DiscordBot {
           let serverDetails = '';
 
           await new Promise((resolve, reject) => {
-            conn.on('ready', () => {
-              conn.exec('./pzserver details', (err, stream) => {
-                if (err) {
-                  conn.end();
-                  return reject(err);
-                }
+            conn
+              .on('ready', () => {
+                conn.exec('./pzserver details', (err, stream) => {
+                  if (err) {
+                    conn.end();
+                    return reject(err);
+                  }
 
-                stream.on('data', (data) => {
-                  serverDetails += data.toString();
-                });
+                  stream.on('data', (data) => {
+                    serverDetails += data.toString();
+                  });
 
-                stream.on('close', () => {
-                  conn.end();
-                  resolve();
-                });
+                  stream.on('close', () => {
+                    conn.end();
+                    resolve();
+                  });
 
-                stream.stderr.on('data', (data) => {
-                  console.error(`SSH stderr: ${data.toString()}`);
+                  stream.stderr.on('data', (data) => {
+                    console.error(`SSH stderr: ${data.toString()}`);
+                  });
                 });
-              });
-            }).on('error', reject).connect(sshConfig);
+              })
+              .on('error', reject)
+              .connect(sshConfig);
           });
 
           // Strip ANSI color codes
@@ -898,11 +924,10 @@ export class DiscordBot {
           console.error('Error in !serverinfo:', err);
         }
       } else if (command === 'checkdeposit' || command === 'checkraiddeposit') {
-
         // Remove cooldown for checkdeposit and checkraiddeposit
 
         // If no username argument, use the requester's Discord username
-        const username = message.member?.displayName || message.author.username
+        const username = message.member?.displayName || message.author.username;
         try {
           await message.react('📩');
           if (command === 'checkdeposit') {
@@ -938,20 +963,23 @@ export class DiscordBot {
 
               const conn = new SSHClient();
               await new Promise((resolve, reject) => {
-                conn.on('ready', () => {
-                  conn.exec('./pzserver start', (err, stream) => {
-                    if (err) {
-                      conn.end();
-                      return reject(err);
-                    }
-                    stream.on('close', () => {
-                      conn.end();
-                      resolve();
+                conn
+                  .on('ready', () => {
+                    conn.exec('./pzserver start', (err, stream) => {
+                      if (err) {
+                        conn.end();
+                        return reject(err);
+                      }
+                      stream.on('close', () => {
+                        conn.end();
+                        resolve();
+                      });
+                      stream.on('data', () => {});
+                      stream.stderr.on('data', () => {});
                     });
-                    stream.on('data', () => {});
-                    stream.stderr.on('data', () => {});
-                  });
-                }).on('error', reject).connect(sshConfig);
+                  })
+                  .on('error', reject)
+                  .connect(sshConfig);
               });
 
               await message.channel.send('✅ Server start command sent via SSH. Server should be online shortly.');
@@ -974,9 +1002,7 @@ export class DiscordBot {
             if (timeSinceLastStart < this.startCooldown) {
               const remainingTime = this.startCooldown - timeSinceLastStart;
               const remainingMinutes = Math.ceil(remainingTime / (60 * 1000));
-              return message.channel.send(
-                `Server start is on cooldown. Please wait ${remainingMinutes} more minutes before starting again.`
-              );
+              return message.channel.send(`Server start is on cooldown. Please wait ${remainingMinutes} more minutes before starting again.`);
             }
           }
 
@@ -986,12 +1012,12 @@ export class DiscordBot {
 
           const confirmMsg = await message.channel.send(
             `**Server Start Requested!**\n` +
-            `**${confirmedUsers.size}/3** confirms | **${canceledUsers.size}/1** cancels\n` +
-            `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
-            `**Note:** At least 3 different users must confirm, or 1 must cancel.`
+              `**${confirmedUsers.size}/3** confirms | **${canceledUsers.size}/1** cancels\n` +
+              `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+              `**Note:** At least 3 different users must confirm, or 1 must cancel.`
           );
 
-          const filter = m => ['confirm', 'cancel'].includes(m.content.toLowerCase());
+          const filter = (m) => ['confirm', 'cancel'].includes(m.content.toLowerCase());
           const collector = message.channel.createMessageCollector({ filter, time: 120000 });
 
           collector.on('collect', async (m) => {
@@ -1006,9 +1032,9 @@ export class DiscordBot {
             // Update the confirmation message
             await confirmMsg.edit(
               `**Server Start Requested!**\n` +
-              `**${confirmedUsers.size}/3** confirms | **${canceledUsers.size}/1** cancels\n` +
-              `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
-              `**Note:** At least 3 different users must confirm, or 1 must cancel.`
+                `**${confirmedUsers.size}/3** confirms | **${canceledUsers.size}/1** cancels\n` +
+                `Type \`confirm\` or \`cancel\` within 120 seconds.\n` +
+                `**Note:** At least 3 different users must confirm, or 1 must cancel.`
             );
 
             // If enough cancels, stop collector and cancel
@@ -1038,20 +1064,23 @@ export class DiscordBot {
 
                 const conn = new SSHClient();
                 await new Promise((resolve, reject) => {
-                  conn.on('ready', () => {
-                    conn.exec('./pzserver start', (err, stream) => {
-                      if (err) {
-                        conn.end();
-                        return reject(err);
-                      }
-                      stream.on('close', () => {
-                        conn.end();
-                        resolve();
+                  conn
+                    .on('ready', () => {
+                      conn.exec('./pzserver start', (err, stream) => {
+                        if (err) {
+                          conn.end();
+                          return reject(err);
+                        }
+                        stream.on('close', () => {
+                          conn.end();
+                          resolve();
+                        });
+                        stream.on('data', () => {});
+                        stream.stderr.on('data', () => {});
                       });
-                      stream.on('data', () => {});
-                      stream.stderr.on('data', () => {});
-                    });
-                  }).on('error', reject).connect(sshConfig);
+                    })
+                    .on('error', reject)
+                    .connect(sshConfig);
                 });
 
                 await message.channel.send('✅ Server start command sent via SSH. Server should be online shortly.');
@@ -1102,9 +1131,7 @@ export class DiscordBot {
         try {
           // Check if discordid or username already exists in the database
           const existingByDiscord = await zmUsersDb.findUserByDiscordId(discordid);
-          const existingByUsername = zmUsersDb.findUserByUsername
-            ? await zmUsersDb.findUserByUsername(username1)
-            : null;
+          const existingByUsername = zmUsersDb.findUserByUsername ? await zmUsersDb.findUserByUsername(username1) : null;
 
           if (existingByDiscord) {
             return message.channel.send('❌ Your Discord account is already registered in the whitelist database.');
@@ -1130,13 +1157,11 @@ export class DiscordBot {
             steamid: steamid,
             username1: username1,
             password1: password1,
-            extradata: `Requested by ${message.author.tag} on ${new Date().toISOString()}`
+            extradata: `Requested by ${message.author.tag} on ${new Date().toISOString()}`,
           });
 
           // 4. Give "Whitelisted" role to the user
-          const whitelistedRole = message.guild.roles.cache.find(
-            role => role.name.toLowerCase() === 'whitelisted'
-          );
+          const whitelistedRole = message.guild.roles.cache.find((role) => role.name.toLowerCase() === 'whitelisted');
           if (whitelistedRole) {
             try {
               const member = await message.guild.members.fetch(discordUserId);
@@ -1264,9 +1289,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'setflag') {
+        } else if (devCommand === 'setflag') {
           if (args.length < 2) {
             return message.channel.send('❌ Usage: `!devsetflag <username> <flagname>`');
           }
@@ -1279,9 +1302,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'removeflag') {
+        } else if (devCommand === 'removeflag') {
           if (args.length < 2) {
             return message.channel.send('❌ Usage: `!devremoveflag <username> <flagname>`');
           }
@@ -1294,9 +1315,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'toggleflag') {
+        } else if (devCommand === 'toggleflag') {
           if (args.length < 2) {
             return message.channel.send('❌ Usage: `!devtoggleflag <username> <flagname>`');
           }
@@ -1309,9 +1328,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'sethours') {
+        } else if (devCommand === 'sethours') {
           if (args.length < 2) {
             return message.channel.send('❌ Usage: `!devsethours <username> <hours>`');
           }
@@ -1328,9 +1345,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'setzombiekills') {
+        } else if (devCommand === 'setzombiekills') {
           if (args.length < 2) {
             return message.channel.send('❌ Usage: `!devsetzombiekills <username> <kills>`');
           }
@@ -1347,9 +1362,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'enchant') {
+        } else if (devCommand === 'enchant') {
           if (args.length < 5) {
             return message.channel.send('❌ Usage: `!devenchant <username> <minDMG> <maxDMG> <enchantment> <name>`');
           }
@@ -1369,9 +1382,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'setserverwideflag') {
+        } else if (devCommand === 'setserverwideflag') {
           if (args.length < 2) {
             return message.channel.send('❌ Usage: `!devsetserverwideflag <flagname> <value>`');
           }
@@ -1384,9 +1395,7 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error updating server flag: ${error.message}`);
           }
-        }
-
-        else if (devCommand === 'setglobalflag') {
+        } else if (devCommand === 'setglobalflag') {
           if (args.length < 2) {
             return message.channel.send('❌ Usage: `!devsetglobalflag <flagname> <true|false>`');
           }
@@ -1405,12 +1414,41 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error updating global flag: ${error.message}`);
           }
-        }
-
-        else {
+        } else {
           message.channel.send(`❌ Unknown developer command: ${devCommand}. Use \`!devhelp\` to see available commands.`);
         }
+      } else if (command === 'isolationstatus') {
+        // Check if user has admin or developer role
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to check isolation zone status.');
+        }
 
+        const status = this.luaCommandManager.getStatus();
+
+        let statusMessage = `**🌙 Isolation Zone Horde Status**\n`;
+        statusMessage += `**Current Time (WIB):** ${status.currentTime}\n`;
+        statusMessage += `**Current Hour:** ${status.currentHour}:xx\n`;
+        statusMessage += `**Active Time Range:** ${status.isInActiveTimeRange ? '✅ YES (7 PM - 12 AM)' : '❌ NO (Outside 7 PM - 12 AM)'}\n`;
+        statusMessage += `**System Active:** ${status.isActive ? '🟢 ACTIVE' : '🔴 INACTIVE'}\n`;
+        statusMessage += `**Next Check:** ${status.nextExecution}\n`;
+        statusMessage += `**Schedule:** ${status.schedule}`;
+
+        message.channel.send(statusMessage);
+      } else if (command === 'testisolation') {
+        // Check if user has admin or developer role
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to test isolation zone commands.');
+        }
+
+        try {
+          await message.channel.send('🧪 **Testing Isolation Zone Horde Check...**');
+
+          await this.luaCommandManager.manualTriggerIsolationZone();
+
+          await message.channel.send('✅ **Isolation Zone Horde Check Test Completed Successfully!**');
+        } catch (error) {
+          await message.channel.send(`❌ **Isolation Zone Test Failed:** ${error.message}`);
+        }
       }
     });
   }
@@ -1419,87 +1457,101 @@ export class DiscordBot {
     // Daily supply run reset at 12:01 PM WIB (UTC+7)
     // Cron format: '01 12 * * *' means every day at 12:01 PM
     // Since WIB is UTC+7, we need to schedule at 05:01 UTC
-    cron.schedule('01 12 * * *', async () => {
-      const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
-      try {
-        console.log(`🕐 [${executionTime}] Running daily supply run reset at 12:01 PM WIB...`);
-
-        // Update server flags directly via SFTP
-        const flagUpdates = {
-          supplyRunAvailableFlag: 1,
-          supplyRunCompleted: 0
-        };
-
-        await this.sftpLogReader.updateMultipleServerFlags(flagUpdates);
-        console.log(`✅ [${executionTime}] Daily supply run reset completed successfully via SFTP!`);
-
-        // Update tracking
-        this.lastCronExecution.supplyRun = new Date();
-        this.lastCronExecution.supplyRunSuccess = true;
-
-        // Send Discord notification
-        await this.sendCronNotification('supply run', true, executionTime);
-
-        // Optionally send a server message to notify players
+    cron.schedule(
+      '01 12 * * *',
+      async () => {
+        const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
         try {
-          await this.wrappedRconClient.send('servermsg "Supply Run has been reset! New supply runs are now available."');
-        } catch (msgError) {
-          console.warn('Could not send server message:', msgError.message);
-        }
+          console.log(`🕐 [${executionTime}] Running daily supply run reset at 12:01 PM WIB...`);
 
-      } catch (error) {
-        console.error(`❌ [${executionTime}] Error during daily supply run reset:`, error);
-        this.lastCronExecution.supplyRun = new Date();
-        this.lastCronExecution.supplyRunSuccess = false;
-        await this.sendCronNotification('supply run', false, executionTime, error.message);
+          // Update server flags directly via SFTP
+          const flagUpdates = {
+            supplyRunAvailableFlag: 1,
+            supplyRunCompleted: 0,
+            horde_one_triggered: 0,
+            horde_two_triggered: 0,
+            screamer_spawned: 0,
+            boss_spawned: 0,
+          };
+
+          await this.sftpLogReader.updateMultipleServerFlags(flagUpdates);
+          console.log(`✅ [${executionTime}] Daily supply run reset completed successfully via SFTP!`);
+
+          // Update tracking
+          this.lastCronExecution.supplyRun = new Date();
+          this.lastCronExecution.supplyRunSuccess = true;
+
+          // Send Discord notification
+          await this.sendCronNotification('supply run', true, executionTime);
+
+          // Optionally send a server message to notify players
+          try {
+            await this.wrappedRconClient.send('servermsg "Supply Run has been reset! (Manual Test) New supply runs are now available."');
+          } catch (msgError) {
+            console.warn('Could not send server message:', msgError.message);
+          }
+        } catch (error) {
+          console.error(`❌ [${executionTime}] Error during daily supply run reset:`, error);
+          this.lastCronExecution.supplyRun = new Date();
+          this.lastCronExecution.supplyRunSuccess = false;
+          await this.sendCronNotification('supply run', false, executionTime, error.message);
+        }
+      },
+      {
+        timezone: 'Asia/Jakarta', // WIB timezone
       }
-    }, {
-      timezone: 'Asia/Jakarta' // WIB timezone
-    });
+    );
 
     // Daily global flags reset at 12:02 PM WIB (UTC+7)
     // Reset daily global flags to false every day
-    cron.schedule('02 12 * * *', async () => {
-      const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
-      try {
-        console.log(`🕐 [${executionTime}] Running daily global flags reset at 12:02 PM WIB...`);
-
-        // Update global flags directly via SFTP
-        const globalFlagUpdates = {
-          daily_tankWB02_flag: false,
-          daily_tankWB01_flag: false,
-          supplyRun_Jessica_taken: false
-        };
-
-        await this.sftpLogReader.updateGlobalFlags(globalFlagUpdates);
-        console.log(`✅ [${executionTime}] Daily global flags reset completed successfully via SFTP!`);
-
-        // Update tracking
-        this.lastCronExecution.tankFlags = new Date();
-        this.lastCronExecution.tankFlagsSuccess = true;
-
-        // Send Discord notification
-        await this.sendCronNotification('global flags', true, executionTime);
-
-        // Optionally send a server message to notify players
+    cron.schedule(
+      '02 12 * * *',
+      async () => {
+        const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
         try {
-          await this.wrappedRconClient.send('servermsg "Daily tank events have been reset! Tank spawns are now available again."');
-        } catch (msgError) {
-          console.warn('Could not send tank reset server message:', msgError.message);
-        }
+          console.log(`🕐 [${executionTime}] Running daily global flags reset at 12:02 PM WIB...`);
 
-      } catch (error) {
-        console.error(`❌ [${executionTime}] Error during daily global flags reset:`, error);
-        this.lastCronExecution.tankFlags = new Date();
-        this.lastCronExecution.tankFlagsSuccess = false;
-        await this.sendCronNotification('global flags', false, executionTime, error.message);
+          // Update global flags directly via SFTP
+          const globalFlagUpdates = {
+            daily_tankWB02_flag: false,
+            daily_tankWB01_flag: false,
+            supplyRun_Jessica_taken: false,
+          };
+
+          await this.sftpLogReader.updateGlobalFlags(globalFlagUpdates);
+          console.log(`✅ [${executionTime}] Daily global flags reset completed successfully via SFTP!`);
+
+          // Update tracking
+          this.lastCronExecution.tankFlags = new Date();
+          this.lastCronExecution.tankFlagsSuccess = true;
+
+          // Send Discord notification
+          await this.sendCronNotification('global flags', true, executionTime);
+
+          // Optionally send a server message to notify players
+          try {
+            await this.wrappedRconClient.send('servermsg "Daily tank events have been reset! Tank spawns are now available again."');
+          } catch (msgError) {
+            console.warn('Could not send tank reset server message:', msgError.message);
+          }
+        } catch (error) {
+          console.error(`❌ [${executionTime}] Error during daily global flags reset:`, error);
+          this.lastCronExecution.tankFlags = new Date();
+          this.lastCronExecution.tankFlagsSuccess = false;
+          await this.sendCronNotification('global flags', false, executionTime, error.message);
+        }
+      },
+      {
+        timezone: 'Asia/Jakarta', // WIB timezone
       }
-    }, {
-      timezone: 'Asia/Jakarta' // WIB timezone
-    });
+    );
 
     console.log('📅 Cron jobs scheduled:');
-    console.log(`   - Daily supply run reset at 12:01 PM WIB (via SFTP) - Current server time: ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' })}`);
+    console.log(
+      `   - Daily supply run reset at 12:01 PM WIB (via SFTP) - Current server time: ${new Date().toLocaleString('en-US', {
+        timeZone: 'Asia/Jakarta',
+      })}`
+    );
     console.log('   - Daily global flags reset at 12:02 PM WIB (via SFTP)');
   }
 
@@ -1510,9 +1562,7 @@ export class DiscordBot {
       let logChannel = null;
 
       for (const channelName of logChannels) {
-        logChannel = this.client.channels.cache.find(channel =>
-          channel.name.toLowerCase().includes(channelName) && channel.type === 0
-        );
+        logChannel = this.client.channels.cache.find((channel) => channel.name.toLowerCase().includes(channelName) && channel.type === 0);
         if (logChannel) break;
       }
 
@@ -1541,5 +1591,8 @@ export class DiscordBot {
       clearInterval(this.rconHeartbeatInterval);
       this.rconHeartbeatInterval = null;
     }
+
+    // Cleanup lua command manager
+    this.luaCommandManager.cleanup();
   }
 }
