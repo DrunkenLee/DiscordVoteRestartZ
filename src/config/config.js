@@ -18,7 +18,8 @@ const config = {
   },
   discord: {
     token: process.env.DISCORD_BOT_TOKEN || "",
-    prefix: process.env.DISCORD_PREFIX || "!"
+    prefix: process.env.DISCORD_PREFIX || "!",
+    aiChannelId: process.env.AI_CHANNEL_ID || "1403231225430413383"
   },
   sftp: {
     host: process.env.SFTP_HOST || "",
@@ -32,6 +33,13 @@ const config = {
   },
   logging: {
     level: process.env.LOG_LEVEL || "info"
+  },
+  ai: {
+    apiKey: process.env.AI_API_KEY || "",
+    model: process.env.AI_MODEL || "gpt-3.5-turbo",
+    maxTokens: parseInt(process.env.AI_MAX_TOKENS) || 150,
+    temperature: parseFloat(process.env.AI_TEMPERATURE) || 0.7,
+    enabled: process.env.AI_ENABLED === "true" || false
   },
   get(path) {
     const parts = path.split('.');

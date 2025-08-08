@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
 import { BattleMetricsAPI } from '../utils/battlemetrics.js';
 import config from '../config/config.js';
+import { commands } from './commands.js';
 import { SftpLogReader } from '../utils/sftpLogReader.js';
 import { Client as SSHClient } from 'ssh2';
 import dotenv from 'dotenv';
@@ -255,6 +256,14 @@ export class DiscordBot {
       // Ignore bot messages
       if (message.author.bot) return;
 
+      // Check if message is in AI channel and doesn't start with prefix
+      const aiChannelId = config.get('discord.aiChannelId');
+      if (message.channel.id === aiChannelId && !message.content.startsWith(config.discord.prefix)) {
+        // Auto-respond with AI in designated channel
+        await this.handleAIChannelMessage(message);
+        return;
+      }
+
       const prefix = config.discord.prefix;
 
       // Check if message starts with prefix
@@ -303,6 +312,22 @@ export class DiscordBot {
       }
 
       // Handle commands
+      // Check if command exists in our commands module
+      const commandObj = commands.find(cmd =>
+        cmd.name === command || (cmd.aliases && cmd.aliases.includes(command))
+      );
+
+      if (commandObj) {
+        try {
+          await commandObj.execute(message, args);
+          return;
+        } catch (error) {
+          console.error(`Error executing command ${command}:`, error);
+          message.channel.send('❌ Terjadi kesalahan saat menjalankan command. Silakan coba lagi nanti.');
+          return;
+        }
+      }
+
       if (command === 'ping') {
         // Simple ping response
         const timeBefore = Date.now();
@@ -1608,6 +1633,64 @@ export class DiscordBot {
       }
     } catch (notificationError) {
       console.error('Failed to send cron notification to Discord:', notificationError.message);
+    }
+  }
+
+  async handleAIChannelMessage(message) {
+    try {
+      // Import AI assistant dinamically untuk avoid circular import
+      const { default: aiAssistant } = await import('../ai/assistant.js');
+
+      // Skip jika pesan terlalu pendek atau hanya emoji/mention
+      const messageContent = message.content.trim();
+      if (messageContent.length < 3 ||
+          /^[!@#$%^&*()_+=\[\]{}|;':",./<>?`~\s]*$/.test(messageContent) ||
+          /^<[@#&!][^>]*>+\s*$/.test(messageContent)) {
+        return;
+      }
+
+      // Check cooldown untuk AI responses (per user, per 30 detik)
+      const aiCooldownKey = `ai:${message.author.id}`;
+      const aiCooldownTime = 30 * 1000; // 30 seconds
+      const now = Date.now();
+
+      if (this.commandCooldowns.has(aiCooldownKey)) {
+        const lastUsed = this.commandCooldowns.get(aiCooldownKey);
+        if (now - lastUsed < aiCooldownTime) {
+          // Skip response jika masih dalam cooldown
+          return;
+        }
+      }
+
+      this.commandCooldowns.set(aiCooldownKey, now);
+
+      // Show typing indicator
+      await message.channel.sendTyping();
+
+      // Generate AI response
+      const response = await aiAssistant.generateResponse(messageContent, {
+        userId: message.author.id,
+        userName: message.author.username,
+        channelId: message.channel.id,
+        isAutoResponse: true
+      });
+
+      // Send response(s) - can be single string or array of strings
+      if (Array.isArray(response)) {
+        for (let i = 0; i < response.length; i++) {
+          await message.channel.send(response[i]);
+          // Add small delay between multiple messages
+          if (i < response.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+      } else {
+        await message.channel.send(response);
+      }
+
+    } catch (error) {
+      console.error('Error in AI channel auto-response:', error);
+      // Don't send error message untuk auto-response, just log it
     }
   }
 
