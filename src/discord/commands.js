@@ -70,30 +70,5 @@ export const askCommand = {
   },
 };
 
-export const helpCommand = {
-  name: 'help',
-  description: 'Shows available commands',
-  aliases: ['bantuan', 'commands'],
-  execute(message) {
-    const helpText = `📋 **Daftar Command Bot**
-
-🏓 **Basic Commands**
-\`!ping\` - Cek status bot
-\`!echo [pesan]\` - Bot mengulangi pesan
-
-🤖 **AI Assistant**
-\`!ask [pertanyaan]\` - Tanya AI tentang server/gameplay
-\`!tanya [pertanyaan]\` - Alias untuk !ask
-
-❓ **Help & Info**
-\`!help\` - Tampilkan pesan ini
-\`!commands\` - Alias untuk !help
-
-Project Zomboid Discord Bot`;
-
-    message.channel.send(helpText);
-  },
-};
-
 // Add more commands as needed
-export const commands = [pingCommand, echoCommand, askCommand, helpCommand];
+export const commands = [pingCommand, echoCommand, askCommand];
