@@ -902,9 +902,11 @@ export class DiscordBot {
                     return reject(err);
                   }
 
-                  stream.on('data', (data) => {
+                    stream.on('data', (data) => {
                     serverDetails += data.toString();
-                  });
+                    // Override specific Internet IP if present in the stream
+                    serverDetails = serverDetails.replace(/Internet IP:\s*69\.162\.93\.50/g, 'Internet IP: 5.56.25.22');
+                    });
 
                   stream.on('close', () => {
                     conn.end();
