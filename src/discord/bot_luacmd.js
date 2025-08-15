@@ -123,21 +123,15 @@ export class BotLuaCommandManager {
               return;
             }
 
-            // Step 4: Execute command for ALL players online
-            console.log(`🎯 [${wibTime.toLocaleString()}] Executing isolation zone horde check for all ${onlinePlayers.length} players...`);
-
             let successCount = 0;
             let errorCount = 0;
 
             for (const player of onlinePlayers) {
               try {
-                console.log(`🔄 [${wibTime.toLocaleString()}] Executing for player: ${player}`);
-                await this.wrappedRconClient.send(`luacmd clientexe ${player} checkIsolationZoneHorde`);
-                console.log(`✅ [${wibTime.toLocaleString()}] Successfully executed for player: ${player}`);
-                successCount++;
+                // successCount++;
 
                 // Add a small delay between commands to avoid overwhelming the server
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // await new Promise(resolve => setTimeout(resolve, 100));
 
               } catch (playerError) {
                 console.error(`❌ [${wibTime.toLocaleString()}] Failed to execute for player ${player}:`, playerError.message);
