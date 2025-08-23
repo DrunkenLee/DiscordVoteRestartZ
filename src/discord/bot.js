@@ -858,8 +858,9 @@ export class DiscordBot {
         whitelistCommands += '**How to Whitelist:**\n';
         whitelistCommands += '1. Use the command above with your SteamID64, desired username, and password.\n';
         whitelistCommands += '2. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
+        whitelistCommands += '3. **For usernames with spaces:** `!whitelistrequest 76561198000000000 My Game Name MyPassword`\n';
         whitelistCommands +=
-          '3. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n';
+          '4. Your message will be deleted for your safety. If successful, you will be whitelisted and given the Whitelisted role.\n';
         whitelistCommands += '**Note:** Please do whitelistrequest in the Support Ticket Channel, so your data is not **EXPOSED**.\n';
 
         // Wallet and Admin Commands Message
@@ -1126,18 +1127,33 @@ export class DiscordBot {
         }
       } else if (command === 'whitelistrequest') {
         // Usage: !whitelistrequest <steamid> <username1> <password1>
+        // Handle usernames with spaces by taking steamid as first arg, password as last arg, everything in between as username
         if (args.length < 3) {
           try {
             if (message.deletable) await message.delete();
           } catch (e) {
             console.error('Failed to delete message with sensitive info:', e);
           }
-          return message.channel.send('❌ Missing arguments! Usage: `!whitelistrequest <steamid> <username1> <password1>`');
+          return message.channel.send('❌ Missing arguments! Usage: `!whitelistrequest <steamid> <username1> <password1>`\n' +
+                                    '**Note:** If your username has spaces, put everything between steamid and password.\n' +
+                                    'Example: `!whitelistrequest 76561198000000000 My Game Name mypassword123`');
         }
 
-        const [steamid, username1, password1] = args;
+        const steamid = args[0];
+        const password1 = args[args.length - 1]; // Last argument is always password
+        const username1 = args.slice(1, -1).join(' '); // Everything between steamid and password
         const discordid = message.author.tag;
         const discordUserId = message.author.id;
+
+        // Validate that we have a proper username (not empty after joining)
+        if (!username1.trim()) {
+          try {
+            if (message.deletable) await message.delete();
+          } catch (e) {
+            console.error('Failed to delete message with sensitive info:', e);
+          }
+          return message.channel.send('❌ Invalid username! Please provide a valid username between steamid and password.');
+        }
 
         // Validate SteamID64 (17 digits, all numbers)
         function isValidSteamID(steamid) {
