@@ -1573,7 +1573,6 @@ export class DiscordBot {
         timezone: 'Asia/Jakarta', // WIB timezone
       }
     );
-
     // Daily global flags reset at 12:02 PM WIB (UTC+7)
     // Reset daily global flags to false every day
     cron.schedule(
@@ -1664,6 +1663,7 @@ export class DiscordBot {
       })}`
     );
     console.log('   - Daily global flags reset at 12:02 PM WIB (via SFTP)');
+    console.log('   - Daily evening world boss reset at 07:00 PM WIB (via SFTP)');
   }
 
   async sendCronNotification(jobType, success, executionTime, errorMessage = null) {
