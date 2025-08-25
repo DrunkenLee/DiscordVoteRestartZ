@@ -846,9 +846,6 @@ export class DiscordBot {
         generalCommands += `\`${prefix}restart\` - Initiate server restart (requires ${this.requiredConfirmations} user confirmations)\n`;
         generalCommands += `\`${prefix}start\` - Start the server (requires confirmations or admin)\n`;
         generalCommands += `\`${prefix}checkupdate\` - Check for mod updates\n`;
-        generalCommands += `\`${prefix}killboard\` - Display the top 10 killboard\n`;
-        generalCommands += `\`${prefix}killboardrc\` - Display the top 10 killboard (Raven Creek Legend) \n`;
-        generalCommands += `\`${prefix}topplaytime\` - Display the top 10 players by playtime - (Under development)\n`;
         generalCommands += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n`;
 
         // Whitelist Commands Message
@@ -1126,8 +1123,7 @@ export class DiscordBot {
           console.error('Error during start command:', error);
         }
       } else if (command === 'whitelistrequest') {
-        // Usage: !whitelistrequest <steamid> <username1> <password1>
-        // Handle usernames with spaces by taking steamid as first arg, password as last arg, everything in between as username
+
         if (args.length < 3) {
           try {
             if (message.deletable) await message.delete();
@@ -1172,12 +1168,12 @@ export class DiscordBot {
         }
 
         try {
-          // Check if discordid or username already exists in the database
-          const existingByDiscord = await zmUsersDb.findUserByDiscordId(discordid);
+          // Check how many accounts this Discord ID already has (allow up to 2)
+          const existingUsersForDiscord = await zmUsersDb.findUsersByDiscordId(discordid);
           const existingByUsername = zmUsersDb.findUserByUsername ? await zmUsersDb.findUserByUsername(username1) : null;
 
-          if (existingByDiscord) {
-            return message.channel.send('❌ Your Discord account is already registered in the whitelist database.');
+          if (existingUsersForDiscord && existingUsersForDiscord.length >= 2) {
+            return message.channel.send('❌ Batas pendaftaran tercapai: Akun Discord Anda sudah terdaftar pada 2 whitelist. Hubungi admin jika butuh tambahan.');
           }
           if (existingByUsername) {
             return message.channel.send('❌ This username is already registered in the whitelist database.');
@@ -1194,11 +1190,18 @@ export class DiscordBot {
           // 2. Add user to whitelist
           await wrappedRconClient.send(`adduser "${username1}" "${password1}"`);
 
-          // 3. Insert all data to Supabase
+          // 3. Insert data to Supabase. If this is the second account for this Discord
+          //    populate the new row's username2 with the first account's username1.
+          let username2ForNew = null;
+          if (existingUsersForDiscord && existingUsersForDiscord.length >= 1) {
+            username2ForNew = existingUsersForDiscord[0].username1 || null;
+          }
+
           await zmUsersDb.addUser({
             discordid: discordid,
             steamid: steamid,
             username1: username1,
+            username2: username2ForNew,
             password1: password1,
             extradata: `Requested by ${message.author.tag} on ${new Date().toISOString()}`,
           });
@@ -1608,6 +1611,45 @@ export class DiscordBot {
           this.lastCronExecution.tankFlags = new Date();
           this.lastCronExecution.tankFlagsSuccess = false;
           await this.sendCronNotification('global flags', false, executionTime, error.message);
+        }
+      },
+      {
+        timezone: 'Asia/Jakarta', // WIB timezone
+      }
+    );
+
+    cron.schedule(
+      '00 19 * * *',
+      async () => {
+        const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+        try {
+          console.log(`🕐 [${executionTime}] Running daily evening boss flags reset at 07:00 PM WIB...`);
+
+          // Update global flags directly via SFTP
+          const globalFlagUpdates = {
+            daily_tankWB03_flag: false,
+            daily_tankWB04_flag: false,
+          };
+
+          await this.sftpLogReader.updateGlobalFlags(globalFlagUpdates);
+          // Update tracking
+          this.lastCronExecution.tankFlags = new Date();
+          this.lastCronExecution.tankFlagsSuccess = true;
+
+          // Send Discord notification
+          await this.sendCronNotification('evening world boss reset', true, executionTime);
+
+          // Optionally send a server message to notify players
+          try {
+            await this.wrappedRconClient.send('servermsg "Evening world boss events have been reset! Boss spawns are now available again."');
+          } catch (msgError) {
+            console.warn('Could not send tank reset server message:', msgError.message);
+          }
+        } catch (error) {
+          console.error(`❌ [${executionTime}] Error during daily evening boss flags reset:`, error);
+          this.lastCronExecution.tankFlags = new Date();
+          this.lastCronExecution.tankFlagsSuccess = false;
+          await this.sendCronNotification('evening world boss reset', false, executionTime, error.message);
         }
       },
       {

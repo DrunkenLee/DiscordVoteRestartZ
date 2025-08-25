@@ -27,6 +27,15 @@ export async function findUserByDiscordId(discordId) {
   return result.rows[0] || null;
 }
 
+// Return all user rows associated with a Discord ID
+export async function findUsersByDiscordId(discordId) {
+  const result = await pool.query(
+    'SELECT * FROM public.zmusers WHERE discordid = $1',
+    [discordId]
+  );
+  return result.rows || [];
+}
+
 // Example: Add user
 export async function addUser(userData) {
   const { discordid, steamid, ownerid, username1, password1, username2, password2, extradata } = userData;
