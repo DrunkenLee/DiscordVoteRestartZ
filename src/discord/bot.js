@@ -1310,7 +1310,17 @@ export class DiscordBot {
           helpMessage += '!devsetserverwideflag <flagname> <value> - Set server-wide flag via SFTP\n';
           helpMessage += '!devsetglobalflag <flagname> <true|false> - Set global flag via SFTP\n';
           helpMessage += '```\n\n';
-          helpMessage += '**🕰️ Cron Job Management:**\n';
+          helpMessage += '**� Player Points Management:**\n';
+          helpMessage += '```\n';
+          helpMessage += '!devaddplayerpoints <username> <points> - Add points to player\n';
+          helpMessage += '!devtakeplayerpoints <username> <points> - Take points from player\n';
+          helpMessage += '!devgetplayerpoints <username> - Get player\'s current points\n';
+          helpMessage += '!devdepositpoints <username> <amount> - Deposit points to server storage\n';
+          helpMessage += '!devdepositraidpoints <username> <amount> - Deposit raid points to server storage\n';
+          helpMessage += '!devwithdrawpoints <username> - Withdraw points from server storage\n';
+          helpMessage += '!devwithdrawraidpoints <username> - Withdraw raid points from server storage\n';
+          helpMessage += '```\n\n';
+          helpMessage += '**�🕰️ Cron Job Management:**\n';
           helpMessage += '```\n';
           helpMessage += '!cronstatus - Check cron job execution status and schedule\n';
           helpMessage += '!testcron supply - Manually test supply run reset\n';
@@ -1459,6 +1469,110 @@ export class DiscordBot {
             message.channel.send(`✅ Set global flag '${flagName}' to ${value} via SFTP`);
           } catch (error) {
             message.channel.send(`❌ Error updating global flag: ${error.message}`);
+          }
+        } else if (devCommand === 'addplayerpoints') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devaddplayerpoints <username> <points>`');
+          }
+          const username = args[0];
+          const points = args[1];
+
+          if (isNaN(points) || parseInt(points) <= 0) {
+            return message.channel.send('❌ Points must be a valid positive number.');
+          }
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} addplayerpoints ${username} ${points}`);
+            message.channel.send(`✅ Added ${points} points to player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'takeplayerpoints') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devtakeplayerpoints <username> <points>`');
+          }
+          const username = args[0];
+          const points = args[1];
+
+          if (isNaN(points) || parseInt(points) <= 0) {
+            return message.channel.send('❌ Points must be a valid positive number.');
+          }
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} takeplayerpoints ${username} ${points}`);
+            message.channel.send(`✅ Removed ${points} points from player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'getplayerpoints') {
+          if (args.length < 1) {
+            return message.channel.send('❌ Usage: `!devgetplayerpoints <username>`');
+          }
+          const username = args[0];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} getplayerpoints ${username}`);
+            message.channel.send(`✅ Sent get points command for player ${username}. Check server console/logs for result.`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'depositpoints') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devdepositpoints <username> <amount>`');
+          }
+          const username = args[0];
+          const amount = args[1];
+
+          if (isNaN(amount) || parseInt(amount) <= 0) {
+            return message.channel.send('❌ Amount must be a valid positive number.');
+          }
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} depositpoints ${username} ${amount}`);
+            message.channel.send(`✅ Sent deposit ${amount} points command for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'depositraidpoints') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devdepositraidpoints <username> <amount>`');
+          }
+          const username = args[0];
+          const amount = args[1];
+
+          if (isNaN(amount) || parseInt(amount) <= 0) {
+            return message.channel.send('❌ Amount must be a valid positive number.');
+          }
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} depositraidpoints ${username} ${amount}`);
+            message.channel.send(`✅ Sent deposit ${amount} raid points command for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'withdrawpoints') {
+          if (args.length < 1) {
+            return message.channel.send('❌ Usage: `!devwithdrawpoints <username>`');
+          }
+          const username = args[0];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} withdrawpoints ${username}`);
+            message.channel.send(`✅ Sent withdraw points command for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'withdrawraidpoints') {
+          if (args.length < 1) {
+            return message.channel.send('❌ Usage: `!devwithdrawraidpoints <username>`');
+          }
+          const username = args[0];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} withdrawraidpoints ${username}`);
+            message.channel.send(`✅ Sent withdraw raid points command for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
           }
         } else {
           message.channel.send(`❌ Unknown developer command: ${devCommand}. Use \`!devhelp\` to see available commands.`);
