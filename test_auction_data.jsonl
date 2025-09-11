@@ -1,0 +1,4 @@
+{"action":"SYSTEM_TEST","timestamp":"2025-09-11T06:58:00Z","unixTime":1726033080,"data":{"test":"connection","server":"Project Zomboid"}}
+{"action":"CREATE_AUCTION","timestamp":"2025-09-11T06:58:30Z","unixTime":1726033110,"data":{"sellerUsername":"TestPlayer","sellerSteamID":"76561198000000001","itemName":"Baseball Bat","itemType":"Base.BaseballBat","condition":0.8,"startingPrice":150,"buyoutPrice":300,"currentBid":150,"duration":24,"isActive":true,"serverName":"ZonaMerah Server"}}
+{"action":"PLACE_BID","timestamp":"2025-09-11T06:59:00Z","unixTime":1726033140,"data":{"auctionID":"1","bidderUsername":"Bidder1","bidderSteamID":"76561198000000002","itemName":"Baseball Bat","bidAmount":175}}
+{"action":"BUYOUT","timestamp":"2025-09-11T06:59:30Z","unixTime":1726033170,"data":{"auctionID":"1","buyerUsername":"Buyer1","buyerSteamID":"76561198000000003","itemName":"Baseball Bat","buyoutPrice":300}}

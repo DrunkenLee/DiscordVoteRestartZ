@@ -1,0 +1,1 @@
+{"action":"CREATE_AUCTION","timestamp":"2025-09-11T07:15:00Z","unixTime":1726035300,"data":{"sellerUsername":"TestUser","sellerSteamID":"76561198000000001","itemName":"Baseball Bat","itemType":"Base.BaseballBat","condition":0.8,"startingPrice":150,"buyoutPrice":300,"currentBid":150,"duration":24,"isActive":true,"serverName":"ZonaMerah Server"}}

@@ -347,4 +347,121 @@ eventDescription=""`;
       await this.disconnect();
     }
   }
+
+  /**
+   * Scan dedicated auction log file (JSONL format) from specified position
+   * @param {number} startPosition - Starting byte position in the auction log file
+   * @returns {Object} - { auctionEntries: [], newPosition: number, success: boolean }
+   */
+  async scanForAuctionLogs(startPosition = 0) {
+    try {
+      await this.connect();
+
+      // Path to dedicated auction log file
+      const auctionLogPath = '/home/pzserver/Zomboid/Lua/auction_data.jsonl';
+      console.log(`[AuctionLogScanner] Scanning auction log file: ${auctionLogPath} from position ${startPosition}`);
+
+      // Check if auction log file exists
+      let fileExists = true;
+      try {
+        await this.sftp.stat(auctionLogPath);
+      } catch (statError) {
+        console.log(`[AuctionLogScanner] Auction log file not found: ${auctionLogPath}`);
+        fileExists = false;
+      }
+
+      if (!fileExists) {
+        return {
+          auctionEntries: [],
+          newPosition: startPosition,
+          success: true,
+          message: 'Auction log file not found - no auctions to process'
+        };
+      }
+
+      // Read the auction log file from start position
+      const logContent = await this.sftp.get(auctionLogPath);
+      const fullContent = logContent.toString();
+
+      // If startPosition is beyond file size, no new content
+      if (startPosition >= fullContent.length) {
+        return {
+          auctionEntries: [],
+          newPosition: startPosition,
+          success: true
+        };
+      }
+
+      // Get content from start position
+      const contentToScan = fullContent.slice(startPosition);
+      const lines = contentToScan.split('\n');
+
+      const auctionEntries = [];
+
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine) { // Skip empty lines
+          try {
+            const auctionEntry = JSON.parse(trimmedLine);
+            auctionEntries.push(auctionEntry);
+            console.log(`[AuctionLogScanner] Found auction entry:`, {
+              action: auctionEntry.action,
+              timestamp: auctionEntry.timestamp,
+              data: auctionEntry.data
+            });
+
+          } catch (parseError) {
+            console.error(`[AuctionLogScanner] Failed to parse JSON line:`, parseError);
+            console.error(`[AuctionLogScanner] Raw line:`, trimmedLine);
+          }
+        }
+      }
+
+      // Calculate new position (end of file)
+      const newPosition = fullContent.length;
+
+      console.log(`[AuctionLogScanner] Scan complete. Found ${auctionEntries.length} auction entries. New position: ${newPosition}`);
+
+      return {
+        auctionEntries,
+        newPosition,
+        success: true
+      };
+
+    } catch (error) {
+      console.error('[AuctionLogScanner] Error scanning auction logs:', error);
+      return {
+        auctionEntries: [],
+        newPosition: startPosition,
+        success: false,
+        error: error.message
+      };
+    } finally {
+      await this.disconnect();
+    }
+  }
+
+  /**
+   * Get the current size/position of the auction log file for tracking
+   * @returns {number} - Current file size in bytes
+   */
+  async getAuctionLogFileSize() {
+    try {
+      await this.connect();
+      const auctionLogPath = '/home/pzserver/Zomboid/auction_data.jsonl';
+
+      try {
+        const stats = await this.sftp.stat(auctionLogPath);
+        return stats.size;
+      } catch (statError) {
+        console.log('[AuctionLogScanner] Auction log file not found, returning size 0');
+        return 0;
+      }
+    } catch (error) {
+      console.error('[AuctionLogScanner] Error getting auction log file size:', error);
+      return 0;
+    } finally {
+      await this.disconnect();
+    }
+  }
 }

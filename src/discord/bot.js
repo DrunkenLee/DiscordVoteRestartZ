@@ -1,5 +1,7 @@
-import { Client, GatewayIntentBits, Events, ActivityType } from 'discord.js';
+import { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { BattleMetricsAPI } from '../utils/battlemetrics.js';
+import { PlayerAuction } from '../models/playerAuction.js';
+import { ZMUser } from '../models/zmuser.js';
 import config from '../config/config.js';
 import { commands } from './commands.js';
 import { SftpLogReader } from '../utils/sftpLogReader.js';
@@ -239,12 +241,15 @@ export class DiscordBot {
     }
   }
 
-  setupEventListeners(rconClient) {
+  setupEventListeners(rconClient, auctionLogMonitor = null) {
     // Set up RCON with auto-reconnect wrapper
     const wrappedRconClient = this.setupRconConnection(rconClient);
 
     // Store wrapped RCON client for cron jobs
     this.wrappedRconClient = wrappedRconClient;
+
+    // Store auction log monitor for commands
+    this.auctionLogMonitor = auctionLogMonitor;
 
     // Initialize lua command manager
     this.luaCommandManager.initialize(wrappedRconClient);
@@ -864,6 +869,10 @@ export class DiscordBot {
         let otherCommands = '**S3 Wallet Commands:**\n';
         otherCommands += `\`${prefix}checkdeposit\` - Check your point deposit (Change your display name to your in-game name)\n`;
         otherCommands += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
+
+        otherCommands += '**Auction Commands:**\n';
+        otherCommands += `\`${prefix}auctionlist\` - View active auctions (auction channel only)\n\n`;
+
         otherCommands += '**Admin Commands:**\n';
         otherCommands += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
         otherCommands += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
@@ -971,6 +980,24 @@ export class DiscordBot {
             message.channel.send('❌ Unable to send you a DM. Please check your privacy settings.');
           }
           console.error(`Error in !${command}:`, err);
+        }
+      } else if (command === 'auctionlist') {
+        // Check if command is used in auction channel
+        const auctionChannelId = config.get('discord.auctionChannelId');
+
+        if (!auctionChannelId) {
+          return message.channel.send('❌ Auction channel not configured. Please contact an administrator.');
+        }
+
+        if (message.channel.id !== auctionChannelId) {
+          return message.channel.send(`❌ This command can only be used in <#${auctionChannelId}> channel.`);
+        }
+
+        try {
+          await this.displayAuctionList(message);
+        } catch (error) {
+          console.error('Error in !auctionlist:', error);
+          message.channel.send('❌ Failed to fetch auction list. Please try again later.');
         }
       } else if (command === 'start') {
         try {
@@ -1326,6 +1353,13 @@ export class DiscordBot {
           helpMessage += '!testcron supply - Manually test supply run reset\n';
           helpMessage += '!testcron tank - Manually test global flags reset\n';
           helpMessage += '!testcron both - Manually test both cron jobs\n';
+          helpMessage += '```\n\n';
+          helpMessage += '**🏪 Auction System Management:**\n';
+          helpMessage += '```\n';
+          helpMessage += '!devauctionstatus - Check auction log monitor status\n';
+          helpMessage += '!devauctionscan - Manually trigger auction log scan\n';
+          helpMessage += '!devauctionstart - Start auction log monitoring\n';
+          helpMessage += '!devauctionstop - Stop auction log monitoring\n';
           helpMessage += '```\n';
           helpMessage += '**Note:** All commands require @admin or @developer role.\n';
           helpMessage += '**Schedule:** Supply run reset at 12:01 PM WIB, global flags reset at 12:02 PM WIB daily.';
@@ -1574,6 +1608,61 @@ export class DiscordBot {
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
+        } else if (devCommand === 'auctionstatus') {
+          // Check auction monitor status
+          try {
+            if (!this.auctionLogMonitor) {
+              return message.channel.send('❌ Auction log monitor not available.');
+            }
+
+            const status = this.auctionLogMonitor.getStatus();
+            let statusMessage = `**🏪 Auction Log Monitor Status**\n\n`;
+            statusMessage += `**Status:** ${status.isRunning ? '🟢 RUNNING' : '🔴 STOPPED'}\n`;
+            statusMessage += `**Current Position:** ${status.currentPosition} bytes\n`;
+            statusMessage += `**Scan Interval:** ${status.scanInterval / 1000}s\n`;
+            statusMessage += `**Interval Active:** ${status.intervalId ? '✅ Yes' : '❌ No'}\n`;
+
+            message.channel.send(statusMessage);
+          } catch (error) {
+            message.channel.send(`❌ Error getting auction status: ${error.message}`);
+          }
+        } else if (devCommand === 'auctionscan') {
+          // Manually trigger auction scan
+          try {
+            if (!this.auctionLogMonitor) {
+              return message.channel.send('❌ Auction log monitor not available.');
+            }
+
+            message.channel.send('🔍 Triggering manual auction log scan...');
+            await this.auctionLogMonitor.manualScan();
+            message.channel.send('✅ Manual auction scan completed!');
+          } catch (error) {
+            message.channel.send(`❌ Error during manual scan: ${error.message}`);
+          }
+        } else if (devCommand === 'auctionstart') {
+          // Start auction monitoring
+          try {
+            if (!this.auctionLogMonitor) {
+              return message.channel.send('❌ Auction log monitor not available.');
+            }
+
+            await this.auctionLogMonitor.start();
+            message.channel.send('✅ Auction log monitoring started successfully!');
+          } catch (error) {
+            message.channel.send(`❌ Failed to start auction monitoring: ${error.message}`);
+          }
+        } else if (devCommand === 'auctionstop') {
+          // Stop auction monitoring
+          try {
+            if (!this.auctionLogMonitor) {
+              return message.channel.send('❌ Auction log monitor not available.');
+            }
+
+            this.auctionLogMonitor.stop();
+            message.channel.send('✅ Auction log monitoring stopped successfully!');
+          } catch (error) {
+            message.channel.send(`❌ Failed to stop auction monitoring: ${error.message}`);
+          }
         } else {
           message.channel.send(`❌ Unknown developer command: ${devCommand}. Use \`!devhelp\` to see available commands.`);
         }
@@ -1778,6 +1867,58 @@ export class DiscordBot {
     );
     console.log('   - Daily global flags reset at 12:02 PM WIB (via SFTP)');
     console.log('   - Daily evening world boss reset at 07:00 PM WIB (via SFTP)');
+
+    // Handle button interactions for auction bids
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      if (!interaction.isButton()) return;
+
+      const { customId, user, channel } = interaction;
+
+      // Check if interaction is in auction channel
+      const auctionChannelId = config.get('discord.auctionChannelId');
+
+      if (!auctionChannelId) {
+        return interaction.reply({ content: '❌ Auction channel not configured. Please contact an administrator.', ephemeral: true });
+      }
+
+      if (channel.id !== auctionChannelId) {
+        return interaction.reply({ content: '❌ Auction interactions can only be used in the auction channel.', ephemeral: true });
+      }
+
+      try {
+        if (customId.startsWith('bid_')) {
+          // Handle bid button clicks
+          const auctionId = customId.split('_')[1];
+
+          // For now, just show a placeholder message
+          await interaction.reply({
+            content: `🚧 Bidding functionality is under development!\n**Auction ID:** ${auctionId}\n**Your User:** ${user.username}\n\nThis feature will be implemented soon.`,
+            ephemeral: true
+          });
+
+        } else if (customId === 'refresh_auctions') {
+          // Handle refresh button
+          await interaction.deferReply({ ephemeral: true });
+
+          // Create a fake message object to reuse displayAuctionList method
+          const fakeMessage = {
+            channel: channel,
+            author: user
+          };
+
+          await this.displayAuctionList(fakeMessage);
+          await interaction.editReply({ content: '✅ Auction list refreshed!' });
+        }
+      } catch (error) {
+        console.error('Error handling auction button interaction:', error);
+
+        if (interaction.deferred) {
+          await interaction.editReply({ content: '❌ An error occurred while processing your request.' });
+        } else {
+          await interaction.reply({ content: '❌ An error occurred while processing your request.', ephemeral: true });
+        }
+      }
+    });
   }
 
   async sendCronNotification(jobType, success, executionTime, errorMessage = null) {
@@ -1865,6 +2006,118 @@ export class DiscordBot {
     } catch (error) {
       console.error('Error in AI channel auto-response:', error);
       // Don't send error message untuk auto-response, just log it
+    }
+  }
+
+  /**
+   * Display auction list with bid buttons
+   * @param {Message} message - Discord message object
+   */
+  async displayAuctionList(message) {
+    try {
+      // Fetch active auctions from database
+      const activeAuctions = await PlayerAuction.findAll({
+        where: { status: 'active' },
+        include: [{
+          model: ZMUser,
+          as: 'seller',
+          attributes: ['username1', 'steamid']
+        }],
+        order: [['createdAt', 'DESC']],
+        limit: 10 // Show latest 10 auctions
+      });
+
+      if (activeAuctions.length === 0) {
+        const embed = new EmbedBuilder()
+          .setTitle('🏪 Current Auctions')
+          .setDescription('No active auctions at the moment.')
+          .setColor(0x3498db)
+          .setTimestamp();
+
+        return message.channel.send({ embeds: [embed] });
+      }
+
+      // Create embed for auction list
+      const embed = new EmbedBuilder()
+        .setTitle('🏪 Current Active Auctions')
+        .setDescription(`Found **${activeAuctions.length}** active auction(s)`)
+        .setColor(0xe74c3c)
+        .setTimestamp()
+        .setFooter({ text: 'Click "Bid" to place a bid on an item' });
+
+      // Add auction fields
+      for (let i = 0; i < activeAuctions.length && i < 5; i++) {
+        const auction = activeAuctions[i];
+        const seller = auction.seller || {};
+
+        const fieldValue = [
+          `**Seller:** ${seller.username1 || 'Unknown'}`,
+          `**Current Bid:** ${auction.lastbid || auction.itemprice} points`,
+          `**Description:** ${auction.itemdesc || 'No description'}`,
+          `**ID:** ${auction.itemid}`
+        ].join('\n');
+
+        embed.addFields({
+          name: `${i + 1}. ${auction.itemname}`,
+          value: fieldValue,
+          inline: true
+        });
+      }
+
+      // Create bid buttons (max 5 buttons per row)
+      const rows = [];
+      const buttonsPerRow = 5;
+
+      for (let i = 0; i < Math.min(activeAuctions.length, 10); i += buttonsPerRow) {
+        const row = new ActionRowBuilder();
+
+        for (let j = i; j < Math.min(i + buttonsPerRow, activeAuctions.length); j++) {
+          const auction = activeAuctions[j];
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`bid_${auction.itemid}`)
+              .setLabel(`Bid #${j + 1}`)
+              .setStyle(ButtonStyle.Primary)
+              .setEmoji('💰')
+          );
+        }
+
+        rows.push(row);
+      }
+
+      // Add refresh button
+      if (rows.length > 0) {
+        const lastRow = rows[rows.length - 1];
+        if (lastRow.components.length < 5) {
+          lastRow.addComponents(
+            new ButtonBuilder()
+              .setCustomId('refresh_auctions')
+              .setLabel('Refresh')
+              .setStyle(ButtonStyle.Secondary)
+              .setEmoji('🔄')
+          );
+        } else {
+          // Create new row for refresh button if last row is full
+          const refreshRow = new ActionRowBuilder()
+            .addComponents(
+              new ButtonBuilder()
+                .setCustomId('refresh_auctions')
+                .setLabel('Refresh')
+                .setStyle(ButtonStyle.Secondary)
+                .setEmoji('🔄')
+            );
+          rows.push(refreshRow);
+        }
+      }
+
+      await message.channel.send({
+        embeds: [embed],
+        components: rows
+      });
+
+    } catch (error) {
+      console.error('Error in displayAuctionList:', error);
+      throw error;
     }
   }
 

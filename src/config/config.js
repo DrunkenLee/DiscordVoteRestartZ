@@ -19,7 +19,8 @@ const config = {
   discord: {
     token: process.env.DISCORD_BOT_TOKEN || "",
     prefix: process.env.DISCORD_PREFIX || "!",
-    aiChannelId: process.env.AI_CHANNEL_ID || "1403231225430413383"
+    aiChannelId: process.env.AI_CHANNEL_ID || "1403231225430413383",
+    auctionChannelId: process.env.AUCTION_CHANNEL_ID || "1415589655587323914"
   },
   sftp: {
     host: process.env.SFTP_HOST || "",

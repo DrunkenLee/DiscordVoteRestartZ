@@ -6,7 +6,8 @@
   },
   "discord": {
     "token": "",
-    "prefix": "!"
+    "prefix": "!",
+    "auctionChannelId": "1415589655587323914"
   },
   "logging": {
     "level": "info"
