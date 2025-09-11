@@ -281,7 +281,7 @@ export class BotLuaCommandManager {
   // Cleanup
   cleanup() {
     if (this.isolationZoneJob) {
-      this.isolationZoneJob.destroy();
+      this.isolationZoneJob.stop();
       this.isolationZoneJob = null;
       console.log('🧹 Isolation zone scheduler cleaned up');
     }

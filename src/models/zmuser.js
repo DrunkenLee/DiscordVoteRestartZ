@@ -2,8 +2,8 @@ import { DataTypes } from 'sequelize';
 import { sequelize } from './index.js';
 
 export const ZMUser = sequelize.define('ZMUser', {
-  userid: {
-    type: DataTypes.INTEGER,
+  id: {
+    type: DataTypes.BIGINT,
     primaryKey: true,
     autoIncrement: true
   },
@@ -23,8 +23,10 @@ export const ZMUser = sequelize.define('ZMUser', {
   password1: DataTypes.STRING,
   username2: DataTypes.STRING,
   password2: DataTypes.STRING,
-  extradata: DataTypes.JSONB
+  extradata: DataTypes.TEXT
 }, {
   tableName: 'zmusers',
-  timestamps: false
+  timestamps: true,
+  createdAt: 'created_at',
+  updatedAt: false // The table doesn't have an updated_at column
 });

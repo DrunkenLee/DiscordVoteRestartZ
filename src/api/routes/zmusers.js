@@ -28,7 +28,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const [updated] = await ZMUser.update(req.body, { where: { userid: req.params.id } });
+    const [updated] = await ZMUser.update(req.body, { where: { id: req.params.id } });
     if (updated) {
       const user = await ZMUser.findByPk(req.params.id);
       res.json(user);
@@ -41,7 +41,7 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const deleted = await ZMUser.destroy({ where: { userid: req.params.id } });
+  const deleted = await ZMUser.destroy({ where: { id: req.params.id } });
   if (deleted) {
     res.sendStatus(204);
   } else {

@@ -28,7 +28,7 @@ export const PlayerAuction = sequelize.define('PlayerAuction', {
   }
 }, {
   tableName: 'player_auctions',
-  timestamps: false
+  timestamps: true
 });
 
-PlayerAuction.belongsTo(ZMUser, { foreignKey: 'sellerid', as: 'seller' });
+PlayerAuction.belongsTo(ZMUser, { foreignKey: 'sellerid', targetKey: 'id', as: 'seller' });
