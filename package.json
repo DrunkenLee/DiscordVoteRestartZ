@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
+    "api": "node src/api/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -23,7 +24,10 @@
     "node-cron": "^3.0.3",
     "openai": "^5.12.1",
     "pg": "^8.16.0",
+    "pg-hstore": "^2.3.4",
     "rcon-client": "^4.2.5",
+    "express": "^4.18.2",
+    "sequelize": "^6.37.1",
     "ssh2": "^1.16.0",
     "ssh2-sftp-client": "^12.0.0",
     "winston": "^3.17.0"
