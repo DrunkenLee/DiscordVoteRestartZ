@@ -80,6 +80,61 @@ export class DiscordBot {
         status: 'online',
       });
     });
+
+    // New handler for v2 bid buttons
+    this.client.on(Events.InteractionCreate, async (interaction) => {
+      try {
+        if (!interaction.isButton()) return;
+        const { customId, user, channel } = interaction;
+        if (!customId.startsWith('bidv2_')) return;
+
+        const auctionChannelId = config.get('discord.auctionChannelId');
+        if (auctionChannelId && channel.id !== auctionChannelId) {
+          return interaction.reply({ content: 'Auction interactions can only be used in the auction channel.', ephemeral: true });
+        }
+
+        const auctionId = customId.split('_')[1];
+        await interaction.deferReply({ ephemeral: true });
+
+        const auction = await PlayerAuction.findByPk(auctionId);
+        if (!auction) {
+          return interaction.editReply({ content: 'Auction not found or no longer active.' });
+        }
+        if (auction.status !== 'active') {
+          return interaction.editReply({ content: 'This auction is not active.' });
+        }
+
+        const bidderDiscordId = String(user.id);
+        const bidder = await ZMUser.findOne({ where: { discordid: bidderDiscordId } });
+        if (!bidder) {
+          return interaction.editReply({ content: 'Your Discord is not linked to a ZM user. Please link it first.' });
+        }
+
+        const startingPrice = parseFloat(auction.itemprice) || 0;
+        const lastBid = parseFloat(auction.lastbid || auction.itemprice) || 0;
+        const increment = Math.max(0, startingPrice * 0.10);
+        const newBid = lastBid + increment;
+
+        await auction.update({
+          lastbid: newBid,
+          buyername: bidder.username1 || bidder.discordid,
+          buyerid: bidder.id || null
+        });
+
+        await interaction.editReply({
+          content: `✅ Bid placed!\nAuction #${auction.itemid} • ${auction.itemname}\nNew current bid: ${newBid} points (+${increment})\nBidder: ${bidder.username1 || user.username}`
+        });
+      } catch (e) {
+        try {
+          if (interaction.deferred) {
+            await interaction.editReply({ content: 'An error occurred while placing your bid.' });
+          } else {
+            await interaction.reply({ content: 'An error occurred while placing your bid.', ephemeral: true });
+          }
+        } catch {}
+        console.error('bidv2 handler error:', e);
+      }
+    });
   }
 
   async login() {
@@ -2075,7 +2130,7 @@ export class DiscordBot {
           const auction = activeAuctions[j];
           row.addComponents(
             new ButtonBuilder()
-              .setCustomId(`bid_${auction.itemid}`)
+              .setCustomId(`bidv2_${auction.itemid}`)
               .setLabel(`Bid #${j + 1}`)
               .setStyle(ButtonStyle.Primary)
               .setEmoji('💰')

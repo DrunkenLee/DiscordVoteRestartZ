@@ -27,14 +27,9 @@ export class AuctionLogMonitor {
     logger.info('[AuctionLogMonitor] Starting auction log monitoring...');
     this.isRunning = true;
 
-    // Get initial file position
-    try {
-      this.currentPosition = await this.sftpLogReader.getAuctionLogFileSize();
-      logger.info(`[AuctionLogMonitor] Starting from position: ${this.currentPosition}`);
-    } catch (error) {
-      logger.error('[AuctionLogMonitor] Error getting initial file position:', error);
-      this.currentPosition = 0;
-    }
+    // Always start from position 0 (we don't persist offsets)
+    this.currentPosition = 0;
+    logger.info(`[AuctionLogMonitor] Starting from position: ${this.currentPosition}`);
 
     // Start periodic scanning
     this.intervalId = setInterval(async () => {
@@ -69,7 +64,8 @@ export class AuctionLogMonitor {
    */
   async scanAndProcessAuctions() {
     try {
-      const result = await this.sftpLogReader.scanForAuctionLogs(this.currentPosition);
+      // Always scan from position 0
+      const result = await this.sftpLogReader.scanForAuctionLogs(0);
 
       if (!result.success) {
         logger.error('[AuctionLogMonitor] Failed to scan auction logs:', result.error);
@@ -79,13 +75,31 @@ export class AuctionLogMonitor {
       if (result.auctionEntries && result.auctionEntries.length > 0) {
         logger.info(`[AuctionLogMonitor] Found ${result.auctionEntries.length} new auction entries`);
 
+        let allSucceeded = true;
         for (const entry of result.auctionEntries) {
-          await this.processAuctionEntry(entry);
+          const ok = await this.processAuctionEntry(entry);
+          if (!ok) allSucceeded = false;
         }
-      }
 
-      // Update position for next scan
-      this.currentPosition = result.newPosition;
+        if (allSucceeded) {
+          try {
+            await this.sftpLogReader.truncateAuctionLogFile();
+            this.currentPosition = 0;
+            logger.info('[AuctionLogMonitor] Successfully processed all entries; auction log truncated.');
+          } catch (truncateError) {
+            logger.error('[AuctionLogMonitor] Failed to truncate auction log after processing:', truncateError);
+            // Keep position at 0 to retry on next cycle
+            this.currentPosition = 0;
+          }
+        } else {
+          // Some entries failed; keep position at 0 to retry next cycle
+          this.currentPosition = 0;
+          logger.warn('[AuctionLogMonitor] Some entries failed; auction log preserved for retry.');
+        }
+      } else {
+        // No entries; keep position at 0
+        this.currentPosition = 0;
+      }
 
     } catch (error) {
       logger.error('[AuctionLogMonitor] Error during scan and process:', error);
@@ -105,27 +119,29 @@ export class AuctionLogMonitor {
       switch (action) {
         case 'CREATE_AUCTION':
           await this.handleCreateAuction(data, timestamp, unixTime);
-          break;
+          return true;
 
         case 'PLACE_BID':
           await this.handlePlaceBid(data, timestamp, unixTime);
-          break;
+          return true;
 
         case 'BUYOUT':
           await this.handleBuyout(data, timestamp, unixTime);
-          break;
+          return true;
 
         case 'SYSTEM_TEST':
           logger.info('[AuctionLogMonitor] System test entry received:', data);
-          break;
+          return true;
 
         default:
           logger.warn(`[AuctionLogMonitor] Unknown auction action: ${action}`);
+          return false;
       }
 
     } catch (error) {
       logger.error('[AuctionLogMonitor] Error processing auction entry:', error);
       logger.error('[AuctionLogMonitor] Entry data:', entry);
+      return false;
     }
   }
 
@@ -160,6 +176,7 @@ export class AuctionLogMonitor {
         itemdesc: this.buildItemDescription(data),
         itemprice: parseFloat(data.startingPrice) || 0,
         lastbid: parseFloat(data.currentBid) || parseFloat(data.startingPrice) || 0,
+        sellername: seller.username1 || data.sellerUsername || null,
         status: data.isActive ? 'active' : 'inactive'
       };
 
@@ -168,8 +185,8 @@ export class AuctionLogMonitor {
 
       logger.info(`[AuctionLogMonitor] ✅ Created auction #${auction.itemid}: ${auctionData.itemname} by ${data.sellerUsername}`);
 
-      // Send notification to auction channel
-      await this.sendAuctionNotification(auction, seller, data);
+      // Send notification to auction channel (detailed fields)
+      await this.sendAuctionNotificationDetailed(auction, seller, data, { timestamp, unixTime });
 
     } catch (error) {
       logger.error('[AuctionLogMonitor] Error handling CREATE_AUCTION:', error);
@@ -316,6 +333,120 @@ export class AuctionLogMonitor {
    * @param {Object} seller - Seller user object
    * @param {Object} data - Original auction data
    */
+  async sendAuctionNotificationDetailed(auction, seller, data, meta = {}) {
+    try {
+      if (!this.discordClient) {
+        logger.warn('[AuctionLogMonitor] Discord client not available for notifications');
+        return;
+      }
+
+      const auctionChannelId = config.get('discord.auctionChannelId');
+      if (!auctionChannelId) {
+        logger.warn('[AuctionLogMonitor] Auction channel ID not configured');
+        return;
+      }
+
+      const auctionChannel = this.discordClient.channels.cache.get(auctionChannelId);
+      if (!auctionChannel) {
+        logger.warn(`[AuctionLogMonitor] Auction channel not found: ${auctionChannelId}`);
+        return;
+      }
+
+      // Map fields for the firearms weapon example
+      const pad2 = (n) => String(n).padStart(2, '0');
+      const fmt2 = (v) => (v !== undefined && v !== null && isFinite(Number(v)) ? Number(v).toFixed(2) : 'N/A');
+      const sellerUsername = data?.sellerUsername || seller?.username1 || 'Unknown';
+      const itemName = data?.itemName || auction.itemname || 'Unknown';
+      const itemType = data?.itemType || 'Unknown';
+      const recoil = data?.modData?.IPPJRecoilDelay != null ? String(data.modData.IPPJRecoilDelay) : 'N/A';
+      const boundedMysticOrb = (data?.hasDamageBoost ?? data?.modData?.hasDamageBoost) != null
+        ? String(data.hasDamageBoost ?? data.modData.hasDamageBoost)
+        : 'N/A';
+      const originalMinDamage = fmt2(data?.modData?.origMinDamage);
+      const originalMaxDamage = fmt2(data?.modData?.origMaxDamage);
+      const enchantMinDamage = fmt2(data?.enchantMinDamage);
+      const enchantMaxDamage = fmt2(data?.enchantMaxDamage);
+      const itemID = data?.itemID != null ? String(data.itemID) : 'N/A';
+      const condition = data?.condition != null ? String(data.condition) : 'N/A';
+      const category = data?.category || 'N/A';
+      const startingPrice = Number.isFinite(Number(data?.startingPrice)) ? `${Number(data.startingPrice)} points` : 'N/A';
+      const buyoutPrice = Number.isFinite(Number(data?.buyoutPrice)) ? `${Number(data.buyoutPrice)} points` : '—';
+      const currentBidVal = Number.isFinite(Number(data?.currentBid)) ? Number(data.currentBid) : 0;
+      const buyoutPriceSafe = Number.isFinite(Number(data?.buyoutPrice)) ? `${Number(data.buyoutPrice)} points` : '-';
+      const currentBid = `${currentBidVal} points`;
+      const duration = data?.duration != null ? `${data.duration} hours` : 'N/A';
+      const d = meta?.timestamp ? new Date(meta.timestamp) : (typeof data?.timestamp === 'number' ? new Date(data.timestamp * 1000) : null);
+      const logTimestamp = d ? `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : 'N/A';
+
+      // Build fields dynamically based on category
+      const fields = [
+        { name: 'timestamp', value: String(logTimestamp), inline: false },
+        { name: 'sellerUsername', value: sellerUsername, inline: true },
+        { name: 'itemName', value: itemName, inline: true },
+        { name: 'itemType', value: itemType, inline: true },
+        { name: 'itemID', value: itemID, inline: true },
+        { name: 'category', value: category, inline: true },
+        { name: 'condition', value: condition, inline: true }
+      ];
+
+      if (category === 'Weapon') {
+        if (recoil != null) fields.push({ name: 'recoil', value: String(recoil), inline: true });
+        if (boundedMysticOrb != null) fields.push({ name: 'boundedMysticOrb', value: String(boundedMysticOrb), inline: true });
+        fields.push(
+          { name: 'originalMinDamage', value: originalMinDamage, inline: true },
+          { name: 'originalMaxDamage', value: originalMaxDamage, inline: true },
+          { name: 'enchantMinDamage', value: enchantMinDamage, inline: true },
+          { name: 'enchantMaxDamage', value: enchantMaxDamage, inline: true }
+        );
+      } else {
+        const cv = data?.modData?.BootRefine?.currentValues;
+        const weight = data?.weight != null ? (Number.isFinite(Number(data.weight)) ? Number(data.weight).toFixed(2) : String(data.weight)) : 'N/A';
+        fields.push(
+          { name: 'weight', value: weight, inline: true },
+          { name: 'server', value: data?.serverName || 'N/A', inline: true },
+          { name: 'customName', value: data?.customName || '—', inline: true }
+        );
+        if (data?.description && String(data.description).trim().length) {
+          fields.push({ name: 'description', value: String(data.description), inline: false });
+        }
+        if (cv) {
+          if (cv.ScratchDefense != null) fields.push({ name: 'ScratchDefense', value: String(cv.ScratchDefense), inline: true });
+          if (cv.BiteDefense != null) fields.push({ name: 'BiteDefense', value: String(cv.BiteDefense), inline: true });
+          if (cv.BulletDefense != null) fields.push({ name: 'BulletDefense', value: String(cv.BulletDefense), inline: true });
+          if (cv.CombatSpeedMod != null) fields.push({ name: 'CombatSpeedMod', value: (Number.isFinite(Number(cv.CombatSpeedMod)) ? Number(cv.CombatSpeedMod).toFixed(2) : String(cv.CombatSpeedMod)), inline: true });
+        }
+      }
+
+      // Pricing and duration
+      fields.push(
+        { name: 'startingPrice', value: startingPrice, inline: false },
+        { name: 'buyoutPrice', value: buyoutPrice, inline: false },
+        { name: 'currentBid', value: currentBid, inline: false },
+        { name: 'duration', value: duration, inline: false }
+      );
+
+      const embed = new EmbedBuilder()
+        .setTitle('New Auction Listed!')
+        .setColor(0x00ff00)
+        .addFields(fields)
+        .setTimestamp()
+        .setFooter({ text: 'Use !auctionlist to see all active auctions' });
+
+      const bidButton = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`bidv2_${auction.itemid}`)
+          .setLabel('Place Bid')
+          .setStyle(ButtonStyle.Primary)
+      );
+
+      await auctionChannel.send({ embeds: [embed], components: [bidButton] });
+
+      logger.info(`[AuctionLogMonitor] Sent auction notification for item: ${auction.itemname}`);
+
+    } catch (error) {
+      logger.error('[AuctionLogMonitor] Error sending auction notification:', error);
+    }
+  }
   async sendAuctionNotification(auction, seller, data) {
     try {
       if (!this.discordClient) {
@@ -377,3 +508,4 @@ export class AuctionLogMonitor {
     }
   }
 }
+

@@ -22,6 +22,22 @@ export const PlayerAuction = sequelize.define('PlayerAuction', {
     allowNull: false
   },
   lastbid: DataTypes.DECIMAL(10, 2),
+  sellername: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  buyername: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  buyerid: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  buyerUsername: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
   status: {
     type: DataTypes.TEXT,
     allowNull: false

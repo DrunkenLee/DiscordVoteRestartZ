@@ -448,7 +448,7 @@ eventDescription=""`;
   async getAuctionLogFileSize() {
     try {
       await this.connect();
-      const auctionLogPath = '/home/pzserver/Zomboid/auction_data.jsonl';
+      const auctionLogPath = '/home/pzserver/Zomboid/Lua/auction_data.jsonl';
 
       try {
         const stats = await this.sftp.stat(auctionLogPath);
@@ -460,6 +460,27 @@ eventDescription=""`;
     } catch (error) {
       console.error('[AuctionLogScanner] Error getting auction log file size:', error);
       return 0;
+    } finally {
+      await this.disconnect();
+    }
+  }
+
+  /**
+   * Truncate the dedicated auction log file after successful processing
+   * @returns {boolean} - True if truncation succeeded
+   */
+  async truncateAuctionLogFile() {
+    const auctionLogPath = '/home/pzserver/Zomboid/Lua/auction_data.jsonl';
+    try {
+      await this.connect();
+
+      // Overwrite with empty content (truncate)
+      await this.sftp.put(Buffer.from('', 'utf8'), auctionLogPath);
+      console.log(`[AuctionLogScanner] Truncated auction log file: ${auctionLogPath}`);
+      return true;
+    } catch (error) {
+      console.error('[AuctionLogScanner] Error truncating auction log file:', error);
+      throw error;
     } finally {
       await this.disconnect();
     }
