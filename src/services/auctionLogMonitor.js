@@ -129,6 +129,10 @@ export class AuctionLogMonitor {
           await this.handleBuyout(data, timestamp, unixTime);
           return true;
 
+        case 'AUCTION_EXPIRED':
+          await this.handleAuctionExpired(data, timestamp, unixTime);
+          return true;
+
         case 'SYSTEM_TEST':
           logger.info('[AuctionLogMonitor] System test entry received:', data);
           return true;
@@ -140,7 +144,7 @@ export class AuctionLogMonitor {
 
     } catch (error) {
       logger.error('[AuctionLogMonitor] Error processing auction entry:', error);
-      logger.error('[AuctionLogMonitor] Entry data:', entry);
+      logger.error('[AuctionLogMonitor] Failed entry data:', JSON.stringify(entry, null, 2));
       return false;
     }
   }
@@ -169,15 +173,54 @@ export class AuctionLogMonitor {
         logger.info(`[AuctionLogMonitor] Created new ZMUser: ${data.sellerUsername}`);
       }
 
-      // Transform auction data to match database schema
+      // Transform auction data to match database schema with enhanced item information
       const auctionData = {
         sellerid: seller.id,
         itemname: data.itemName || data.itemType,
         itemdesc: this.buildItemDescription(data),
+        itemtype: data.itemType || null,
+        itemcondition: data.condition ? parseFloat(data.condition) / 100 : null, // Convert percentage to decimal (50 -> 0.50)
         itemprice: parseFloat(data.startingPrice) || 0,
         lastbid: parseFloat(data.currentBid) || parseFloat(data.startingPrice) || 0,
+        buyoutprice: data.buyoutPrice ? parseFloat(data.buyoutPrice) : null,
         sellername: seller.username1 || data.sellerUsername || null,
-        status: data.isActive ? 'active' : 'inactive'
+        status: data.isActive ? 'active' : 'inactive',
+        // Store complete item data as JSON strings
+        moddata: data.modData ? JSON.stringify(data.modData) : null,
+        itemdata: data.fullItemData ? JSON.stringify(data.fullItemData) :
+                  data.itemProperties ? JSON.stringify({
+                    itemType: data.itemType,
+                    condition: data.condition,
+                    weight: data.weight,
+                    properties: data.itemProperties,
+                    category: data.category,
+                    description: data.description,
+                    customName: data.customName
+                  }) :
+                  JSON.stringify({
+                    itemType: data.itemType,
+                    itemID: data.itemID,
+                    itemName: data.itemName,
+                    customName: data.customName,
+                    condition: data.condition,
+                    weight: data.weight,
+                    category: data.category,
+                    description: data.description,
+                    tooltip: data.tooltip,
+                    enchantmentLevel: data.enchantmentLevel,
+                    hasDamageBoost: data.hasDamageBoost,
+                    enchantMaxDamage: data.enchantMaxDamage,
+                    enchantMinDamage: data.enchantMinDamage,
+                    originalMaxDamage: data.originalMaxDamage,
+                    originalMinDamage: data.originalMinDamage
+                  }),
+        // Store original log entry for complete traceability
+        originalsource: JSON.stringify({
+          action: 'CREATE_AUCTION',
+          timestamp: timestamp,
+          unixTime: unixTime,
+          data: data
+        })
       };
 
       // Create auction in database
@@ -228,9 +271,12 @@ export class AuctionLogMonitor {
         logger.info(`[AuctionLogMonitor] Created new ZMUser: ${data.bidderUsername}`);
       }
 
-      // Update auction with new bid
+      // Update auction with new bid and buyer information
       await auction.update({
-        lastbid: parseFloat(data.bidAmount)
+        lastbid: parseFloat(data.bidAmount),
+        buyername: bidder.username1 || data.bidderUsername || null,
+        buyerid: bidder.id || null,
+        buyerUsername: bidder.username1 || null
       });
 
       logger.info(`[AuctionLogMonitor] ✅ Updated bid for auction #${auction.itemid}: ${data.bidAmount} by ${data.bidderUsername}`);
@@ -275,16 +321,109 @@ export class AuctionLogMonitor {
         logger.info(`[AuctionLogMonitor] Created new ZMUser: ${data.buyerUsername}`);
       }
 
-      // Update auction status to sold/completed
+      // Update auction status to completed with buyer information
       await auction.update({
         lastbid: parseFloat(data.buyoutPrice),
-        status: 'sold'
+        buyername: buyer.username1 || data.buyerUsername || null,
+        buyerid: buyer.id || null,
+        buyerUsername: buyer.username1 || null,
+        status: 'completed'
       });
+
+      // Create auction win file with complete item data
+      try {
+        await this.sftpLogReader.createAuctionWinFile(buyer.username1, auction.toJSON());
+        logger.info(`[AuctionLogMonitor] Created win file for ${buyer.username1} - Auction #${auction.itemid} (Log Bridge Buyout)`);
+      } catch (fileError) {
+        logger.error('[AuctionLogMonitor] Error creating win file for log bridge buyout:', fileError);
+      }
 
       logger.info(`[AuctionLogMonitor] ✅ Buyout completed for auction #${auction.itemid}: ${data.buyoutPrice} by ${data.buyerUsername}`);
 
     } catch (error) {
       logger.error('[AuctionLogMonitor] Error handling BUYOUT:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Handle AUCTION_EXPIRED action
+   * @param {Object} data - Auction expiry data
+   * @param {string} timestamp - ISO timestamp
+   * @param {number} unixTime - Unix timestamp
+   */
+  async handleAuctionExpired(data, timestamp, unixTime) {
+    try {
+      // Find auction by itemID
+      const auction = await PlayerAuction.findOne({
+        where: { itemid: data.auctionID },
+        include: [{
+          model: ZMUser,
+          as: 'seller',
+          attributes: ['username1', 'steamid']
+        }]
+      });
+
+      if (!auction) {
+        logger.warn(`[AuctionLogMonitor] Auction not found for expiry: ${data.auctionID}`);
+        return;
+      }
+
+      // Check if auction had a winner (highest bidder)
+      if (data.winnerSteamID && data.winnerUsername) {
+        // Ensure Steam ID is a string for database compatibility
+        const winnerSteamIdString = String(data.winnerSteamID);
+
+        // Find or create winner
+        const [winner, created] = await ZMUser.findOrCreate({
+          where: { steamid: winnerSteamIdString },
+          defaults: {
+            username1: data.winnerUsername,
+            steamid: winnerSteamIdString
+          }
+        });
+
+        if (created) {
+          logger.info(`[AuctionLogMonitor] Created new ZMUser for winner: ${data.winnerUsername}`);
+        }
+
+        // Update auction status to completed with winner information
+        await auction.update({
+          lastbid: parseFloat(data.finalBid || auction.lastbid),
+          buyername: winner.username1 || data.winnerUsername || null,
+          buyerid: winner.id || null,
+          buyerUsername: winner.username1 || null,
+          status: 'completed'
+        });
+
+        // Create auction win file for the winner
+        try {
+          await this.sftpLogReader.createAuctionWinFile(winner.username1, auction.toJSON());
+          logger.info(`[AuctionLogMonitor] Created win file for winner ${winner.username1} - Auction #${auction.itemid} (Log Bridge Expired with winner)`);
+        } catch (fileError) {
+          logger.error('[AuctionLogMonitor] Error creating win file for expired auction winner:', fileError);
+        }
+
+      } else {
+        // No winner, return item to seller
+        await auction.update({ status: 'expired' });
+
+        // Create auction win file to return item to seller
+        try {
+          const seller = auction.seller;
+          const sellerUsername = seller?.username1 || data.sellerUsername || 'Unknown';
+
+          await this.sftpLogReader.createAuctionWinFile(sellerUsername, auction.toJSON());
+          logger.info(`[AuctionLogMonitor] Created win file to return item to seller ${sellerUsername} - Auction #${auction.itemid} (Log Bridge Expired with no winner)`);
+        } catch (fileError) {
+          logger.error('[AuctionLogMonitor] Error creating win file for expired auction return:', fileError);
+        }
+      }
+
+      logger.info(`[AuctionLogMonitor] ✅ Processed expired auction #${auction.itemid}: ${data.winnerUsername ? 'Winner: ' + data.winnerUsername : 'Returned to seller'}`);
+
+    } catch (error) {
+      logger.error('[AuctionLogMonitor] Error handling AUCTION_EXPIRED:', error);
       throw error;
     }
   }
@@ -298,7 +437,11 @@ export class AuctionLogMonitor {
     const parts = [];
 
     if (data.itemType) parts.push(`Type: ${data.itemType}`);
-    if (data.condition !== undefined) parts.push(`Condition: ${(data.condition * 100).toFixed(1)}%`);
+    if (data.condition !== undefined) {
+      // Condition is already in percentage format (0-100), don't multiply by 100
+      const conditionPercent = parseFloat(data.condition).toFixed(1);
+      parts.push(`Condition: ${conditionPercent}%`);
+    }
     if (data.buyoutPrice) parts.push(`Buyout: ${data.buyoutPrice}`);
     if (data.duration) parts.push(`Duration: ${data.duration}h`);
     if (data.serverName) parts.push(`Server: ${data.serverName}`);
@@ -421,7 +564,7 @@ export class AuctionLogMonitor {
       fields.push(
         { name: 'startingPrice', value: startingPrice, inline: false },
         { name: 'buyoutPrice', value: buyoutPrice, inline: false },
-        { name: 'currentBid', value: currentBid, inline: false },
+        { name: 'initialBid', value: currentBid, inline: false },
         { name: 'duration', value: duration, inline: false }
       );
 
@@ -430,16 +573,51 @@ export class AuctionLogMonitor {
         .setColor(0x00ff00)
         .addFields(fields)
         .setTimestamp()
-        .setFooter({ text: 'Use !auctionlist to see all active auctions' });
+        .setFooter({ text: 'New auctions are automatically posted from the game server' });
 
-      const bidButton = new ActionRowBuilder().addComponents(
+      // Create button components
+      const buttons = [];
+
+      // Auto bid button
+      buttons.push(
         new ButtonBuilder()
           .setCustomId(`bidv2_${auction.itemid}`)
-          .setLabel('Place Bid')
+          .setLabel('Auto Bid')
           .setStyle(ButtonStyle.Primary)
+          .setEmoji('💰')
       );
 
-      await auctionChannel.send({ embeds: [embed], components: [bidButton] });
+      // Manual bid button
+      buttons.push(
+        new ButtonBuilder()
+          .setCustomId(`manualbid_${auction.itemid}`)
+          .setLabel('Manual Bid')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('✏️')
+      );
+
+      // Buyout button (only if buyout price is set)
+      if (Number.isFinite(Number(data?.buyoutPrice)) && Number(data.buyoutPrice) > 0) {
+        buttons.push(
+          new ButtonBuilder()
+            .setCustomId(`buyout_${auction.itemid}`)
+            .setLabel(`Buyout ${Number(data.buyoutPrice)} pts`)
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('🚀')
+        );
+      }
+
+      const actionRow = new ActionRowBuilder().addComponents(buttons);
+
+      const sentMessage = await auctionChannel.send({ embeds: [embed], components: [actionRow] });
+
+      // Store the Discord message ID in the auction record for later deletion
+      try {
+        await auction.update({ discordMessageId: sentMessage.id });
+        logger.info(`[AuctionLogMonitor] Stored Discord message ID ${sentMessage.id} for auction #${auction.itemid}`);
+      } catch (updateError) {
+        logger.warn(`[AuctionLogMonitor] Failed to store Discord message ID for auction #${auction.itemid}:`, updateError);
+      }
 
       logger.info(`[AuctionLogMonitor] Sent auction notification for item: ${auction.itemname}`);
 

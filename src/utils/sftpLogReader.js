@@ -485,4 +485,282 @@ eventDescription=""`;
       await this.disconnect();
     }
   }
+
+  /**
+   * Create auction win file on server as JSON format for Lua parsing
+   * @param {string} playerUsername - Winner's username1 from zmusers table
+   * @param {object} auctionData - Complete auction data object
+   * @returns {boolean} - True if file creation succeeded
+   */
+  async createAuctionWinFile(playerUsername, auctionData) {
+    try {
+      await this.connect();
+
+      // Create timestamp for filename
+      const timestamp = Date.now();
+      const fileName = `${playerUsername}.auctionWin#${timestamp}.json`;
+      const auctionLogDir = '/home/pzserver/Zomboid/Lua/AuctionLog';
+      const filePath = `${auctionLogDir}/${fileName}`;
+
+      // Ensure directory exists (create if not)
+      try {
+        await this.sftp.stat(auctionLogDir);
+      } catch (statError) {
+        // Directory doesn't exist, create it
+        await this.sftp.mkdir(auctionLogDir, true);
+        console.log(`[AuctionWin] Created directory: ${auctionLogDir}`);
+      }
+
+      // Format auction data as JSON for Lua consumption
+      const jsonContent = this.formatAuctionWinDataAsJSON(auctionData);
+
+      // Write JSON file to server
+      await this.sftp.put(Buffer.from(jsonContent, 'utf8'), filePath);
+      console.log(`[AuctionWin] Created auction win JSON file: ${filePath}`);
+
+      return true;
+    } catch (error) {
+      console.error('[AuctionWin] Error creating auction win file:', error);
+      throw error;
+    } finally {
+      await this.disconnect();
+    }
+  }
+
+  /**
+   * Format auction data as JSON for Lua parsing
+   * @param {object} auctionData - Complete auction data object
+   * @returns {string} - JSON string for the auction win data
+   */
+  formatAuctionWinDataAsJSON(auctionData) {
+    // Parse JSON data if it exists
+    let parsedModData = null;
+    let parsedItemData = null;
+    let parsedOriginalSource = null;
+
+    try {
+      if (auctionData.moddata) {
+        parsedModData = JSON.parse(auctionData.moddata);
+      }
+    } catch (e) {
+      console.warn('[AuctionWin] Failed to parse moddata for JSON:', e);
+      parsedModData = { raw: auctionData.moddata };
+    }
+
+    try {
+      if (auctionData.itemdata) {
+        parsedItemData = JSON.parse(auctionData.itemdata);
+      }
+    } catch (e) {
+      console.warn('[AuctionWin] Failed to parse itemdata for JSON:', e);
+      parsedItemData = { raw: auctionData.itemdata };
+    }
+
+    try {
+      if (auctionData.originalsource) {
+        parsedOriginalSource = JSON.parse(auctionData.originalsource);
+      }
+    } catch (e) {
+      console.warn('[AuctionWin] Failed to parse originalsource for JSON:', e);
+      parsedOriginalSource = { raw: auctionData.originalsource };
+    }
+
+    // Create structured JSON object optimized for Lua parsing
+    const auctionWinData = {
+      auctionInfo: {
+        auctionID: auctionData.itemid,
+        itemName: auctionData.itemname,
+        itemDescription: auctionData.itemdesc || null,
+        itemType: auctionData.itemtype || 'Unknown',
+        itemCondition: auctionData.itemcondition || 'Unknown',
+        startingPrice: auctionData.itemprice || 0,
+        finalBid: auctionData.lastbid || 0,
+        buyoutPrice: auctionData.buyoutprice || null,
+        status: auctionData.status || 'completed'
+      },
+      sellerInfo: {
+        sellerID: auctionData.sellerid,
+        sellerName: auctionData.sellername || null
+      },
+      winnerInfo: {
+        buyerID: auctionData.buyerid,
+        buyerName: auctionData.buyername || null,
+        buyerUsername: auctionData.buyerUsername || null
+      },
+      timestamps: {
+        createdAt: auctionData.createdAt,
+        updatedAt: auctionData.updatedAt,
+        fileGenerated: new Date().toISOString()
+      },
+      itemData: {
+        modData: parsedModData,
+        itemData: parsedItemData,
+        originalSource: parsedOriginalSource
+      },
+      gameIntegration: {
+        instructions: "Use itemData for complete item reconstruction, apply modData for properties/enchantments",
+        restorationPriority: [
+          "Use itemData.itemData for complete item reconstruction",
+          "Apply itemData.modData for custom properties and enchantments",
+          `Set item condition to: ${auctionData.itemcondition || '1.0'}`,
+          `Verify item type matches: ${auctionData.itemtype || 'Base.Unknown'}`
+        ]
+      },
+      metadata: {
+        version: "1.0",
+        format: "json",
+        luaCompatible: true
+      }
+    };
+
+    // Return formatted JSON with proper indentation for readability
+    return JSON.stringify(auctionWinData, null, 2);
+  }
+
+  /**
+   * Format auction data for auction win file with complete item information (legacy text format)
+   * @param {object} auctionData - Complete auction data object
+   * @returns {string} - Formatted file content with full item data
+   */
+  formatAuctionWinData(auctionData) {
+    const timestamp = new Date().toISOString();
+
+    // Parse JSON data if it exists
+    let parsedModData = null;
+    let parsedItemData = null;
+    let parsedOriginalSource = null;
+
+    try {
+      if (auctionData.moddata) {
+        parsedModData = JSON.parse(auctionData.moddata);
+      }
+    } catch (e) {
+      console.warn('[AuctionWin] Failed to parse moddata:', e);
+    }
+
+    try {
+      if (auctionData.itemdata) {
+        parsedItemData = JSON.parse(auctionData.itemdata);
+      }
+    } catch (e) {
+      console.warn('[AuctionWin] Failed to parse itemdata:', e);
+    }
+
+    try {
+      if (auctionData.originalsource) {
+        parsedOriginalSource = JSON.parse(auctionData.originalsource);
+      }
+    } catch (e) {
+      console.warn('[AuctionWin] Failed to parse originalsource:', e);
+    }
+
+    // Build comprehensive auction win file
+    let content = `AUCTION WIN RECORD
+Generated: ${timestamp}
+================================
+
+BASIC AUCTION INFORMATION:
+Auction ID: ${auctionData.itemid}
+Item Name: ${auctionData.itemname}
+Item Description: ${auctionData.itemdesc || 'No description'}
+Item Type: ${auctionData.itemtype || 'Unknown'}
+Item Condition: ${auctionData.itemcondition || 'Unknown'}
+Starting Price: ${auctionData.itemprice} points
+Final Bid: ${auctionData.lastbid} points
+Buyout Price: ${auctionData.buyoutprice || 'Not set'} points
+Status: ${auctionData.status}
+
+SELLER INFORMATION:
+- Seller ID: ${auctionData.sellerid}
+- Seller Name: ${auctionData.sellername || 'Unknown'}
+
+WINNER INFORMATION:
+- Buyer ID: ${auctionData.buyerid}
+- Buyer Name: ${auctionData.buyername || 'Unknown'}
+- Buyer Username: ${auctionData.buyerUsername || 'Unknown'}
+
+AUCTION TIMESTAMPS:
+- Created: ${auctionData.createdAt}
+- Last Updated: ${auctionData.updatedAt}
+
+================================
+COMPLETE ITEM DATA SECTION:
+================================
+
+`;
+
+    // Add MOD DATA section if available
+    if (parsedModData) {
+      content += `MOD DATA:
+${JSON.stringify(parsedModData, null, 2)}
+
+`;
+    } else if (auctionData.moddata) {
+      content += `MOD DATA (Raw):
+${auctionData.moddata}
+
+`;
+    } else {
+      content += `MOD DATA:
+No mod data available
+
+`;
+    }
+
+    // Add ITEM DATA section if available
+    if (parsedItemData) {
+      content += `ITEM DATA:
+${JSON.stringify(parsedItemData, null, 2)}
+
+`;
+    } else if (auctionData.itemdata) {
+      content += `ITEM DATA (Raw):
+${auctionData.itemdata}
+
+`;
+    } else {
+      content += `ITEM DATA:
+No item data available
+
+`;
+    }
+
+    // Add ORIGINAL SOURCE section if available
+    if (parsedOriginalSource) {
+      content += `ORIGINAL LOG BRIDGE DATA:
+${JSON.stringify(parsedOriginalSource, null, 2)}
+
+`;
+    } else if (auctionData.originalsource) {
+      content += `ORIGINAL LOG BRIDGE DATA (Raw):
+${auctionData.originalsource}
+
+`;
+    } else {
+      content += `ORIGINAL LOG BRIDGE DATA:
+No original source data available
+
+`;
+    }
+
+    content += `================================
+GAME INTEGRATION INSTRUCTIONS:
+================================
+
+This file contains complete item data for restoration.
+The game should use the ITEM DATA and MOD DATA sections
+to recreate the exact item with all properties, enchantments,
+conditions, and modifications intact.
+
+Item Restoration Priority:
+1. Use ITEM DATA for complete item reconstruction
+2. Apply MOD DATA for custom properties and enchantments
+3. Set item condition to: ${auctionData.itemcondition || '1.0'}
+4. Verify item type matches: ${auctionData.itemtype || 'Base.Unknown'}
+
+================================
+End of Auction Win Record`;
+
+    return content;
+  }
 }

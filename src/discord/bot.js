@@ -1,7 +1,8 @@
-import { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { BattleMetricsAPI } from '../utils/battlemetrics.js';
 import { PlayerAuction } from '../models/playerAuction.js';
 import { ZMUser } from '../models/zmuser.js';
+import { Op } from 'sequelize';
 import config from '../config/config.js';
 import { commands } from './commands.js';
 import { SftpLogReader } from '../utils/sftpLogReader.js';
@@ -12,6 +13,8 @@ import cron from 'node-cron';
 dotenv.config();
 import RPC from 'discord-rpc';
 import { BotLuaCommandManager } from './bot_luacmd.js';
+import fs from 'fs/promises';
+import path from 'path';
 
 export class DiscordBot {
   constructor(token) {
@@ -81,60 +84,7 @@ export class DiscordBot {
       });
     });
 
-    // New handler for v2 bid buttons
-    this.client.on(Events.InteractionCreate, async (interaction) => {
-      try {
-        if (!interaction.isButton()) return;
-        const { customId, user, channel } = interaction;
-        if (!customId.startsWith('bidv2_')) return;
 
-        const auctionChannelId = config.get('discord.auctionChannelId');
-        if (auctionChannelId && channel.id !== auctionChannelId) {
-          return interaction.reply({ content: 'Auction interactions can only be used in the auction channel.', ephemeral: true });
-        }
-
-        const auctionId = customId.split('_')[1];
-        await interaction.deferReply({ ephemeral: true });
-
-        const auction = await PlayerAuction.findByPk(auctionId);
-        if (!auction) {
-          return interaction.editReply({ content: 'Auction not found or no longer active.' });
-        }
-        if (auction.status !== 'active') {
-          return interaction.editReply({ content: 'This auction is not active.' });
-        }
-
-        const bidderDiscordId = String(user.id);
-        const bidder = await ZMUser.findOne({ where: { discordid: bidderDiscordId } });
-        if (!bidder) {
-          return interaction.editReply({ content: 'Your Discord is not linked to a ZM user. Please link it first.' });
-        }
-
-        const startingPrice = parseFloat(auction.itemprice) || 0;
-        const lastBid = parseFloat(auction.lastbid || auction.itemprice) || 0;
-        const increment = Math.max(0, startingPrice * 0.10);
-        const newBid = lastBid + increment;
-
-        await auction.update({
-          lastbid: newBid,
-          buyername: bidder.username1 || bidder.discordid,
-          buyerid: bidder.id || null
-        });
-
-        await interaction.editReply({
-          content: `✅ Bid placed!\nAuction #${auction.itemid} • ${auction.itemname}\nNew current bid: ${newBid} points (+${increment})\nBidder: ${bidder.username1 || user.username}`
-        });
-      } catch (e) {
-        try {
-          if (interaction.deferred) {
-            await interaction.editReply({ content: 'An error occurred while placing your bid.' });
-          } else {
-            await interaction.reply({ content: 'An error occurred while placing your bid.', ephemeral: true });
-          }
-        } catch {}
-        console.error('bidv2 handler error:', e);
-      }
-    });
   }
 
   async login() {
@@ -926,7 +876,7 @@ export class DiscordBot {
         otherCommands += `\`${prefix}checkraiddeposit\` - Check your raid points deposit (Change your display name to your in-game name)\n\n`;
 
         otherCommands += '**Auction Commands:**\n';
-        otherCommands += `\`${prefix}auctionlist\` - View active auctions (auction channel only)\n\n`;
+        otherCommands += `Auction listings are automatically posted from the game server.\n\n`;
 
         otherCommands += '**Admin Commands:**\n';
         otherCommands += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
@@ -1035,24 +985,6 @@ export class DiscordBot {
             message.channel.send('❌ Unable to send you a DM. Please check your privacy settings.');
           }
           console.error(`Error in !${command}:`, err);
-        }
-      } else if (command === 'auctionlist') {
-        // Check if command is used in auction channel
-        const auctionChannelId = config.get('discord.auctionChannelId');
-
-        if (!auctionChannelId) {
-          return message.channel.send('❌ Auction channel not configured. Please contact an administrator.');
-        }
-
-        if (message.channel.id !== auctionChannelId) {
-          return message.channel.send(`❌ This command can only be used in <#${auctionChannelId}> channel.`);
-        }
-
-        try {
-          await this.displayAuctionList(message);
-        } catch (error) {
-          console.error('Error in !auctionlist:', error);
-          message.channel.send('❌ Failed to fetch auction list. Please try again later.');
         }
       } else if (command === 'start') {
         try {
@@ -1914,6 +1846,23 @@ export class DiscordBot {
       }
     );
 
+    // Auction expiry checker - runs every 5 minutes
+    cron.schedule(
+      '*/5 * * * *',
+      async () => {
+        const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+        try {
+          console.log(`🕐 [${executionTime}] Checking for expired auctions...`);
+          await this.processExpiredAuctions();
+        } catch (error) {
+          console.error(`❌ [${executionTime}] Error during expired auction check:`, error);
+        }
+      },
+      {
+        timezone: 'Asia/Jakarta', // WIB timezone
+      }
+    );
+
     console.log('📅 Cron jobs scheduled:');
     console.log(
       `   - Daily supply run reset at 12:01 PM WIB (via SFTP) - Current server time: ${new Date().toLocaleString('en-US', {
@@ -1922,14 +1871,140 @@ export class DiscordBot {
     );
     console.log('   - Daily global flags reset at 12:02 PM WIB (via SFTP)');
     console.log('   - Daily evening world boss reset at 07:00 PM WIB (via SFTP)');
+    console.log('   - Auction expiry checker every 5 minutes');
 
-    // Handle button interactions for auction bids
+    // Handle button interactions and modal submissions for auction system
     this.client.on(Events.InteractionCreate, async (interaction) => {
+      // Handle modal submissions
+      if (interaction.isModalSubmit()) {
+        const { customId, user, channel } = interaction;
+
+        const auctionChannelId = config.get('discord.auctionChannelId');
+
+        if (!auctionChannelId) {
+          return interaction.reply({ content: '❌ Auction channel not configured. Please contact an administrator.', ephemeral: true });
+        }
+
+        if (channel.id !== auctionChannelId) {
+          return interaction.reply({ content: '❌ Auction interactions can only be used in the auction channel.', ephemeral: true });
+        }
+
+        if (customId.startsWith('manualbid_modal_')) {
+          try {
+            const auctionId = customId.split('_')[2];
+            const bidAmount = interaction.fields.getTextInputValue('bid_amount');
+
+            await interaction.deferReply({ ephemeral: true });
+
+            // Validate bid amount
+            const bidAmountNum = parseFloat(bidAmount);
+            if (isNaN(bidAmountNum) || bidAmountNum <= 0) {
+              return interaction.editReply({ content: '❌ Invalid bid amount. Please enter a valid number.' });
+            }
+
+            const auction = await PlayerAuction.findByPk(auctionId);
+            if (!auction) {
+              return interaction.editReply({ content: 'Auction not found or no longer active.' });
+            }
+            if (auction.status !== 'active') {
+              return interaction.editReply({ content: 'This auction is not active.' });
+            }
+
+            const bidderDiscordId = String(user.username);
+            const bidder = await ZMUser.findOne({ where: { discordid: bidderDiscordId } });
+
+            if (!bidder) {
+              return interaction.editReply({
+                content: '❌ **Whitelisted users only!**\n\nOnly whitelisted users can use auction features.'
+              });
+            }
+
+            // Check if bidder is trying to bid on their own auction
+            if (auction.sellerid === bidder.id) {
+              return interaction.editReply({ content: 'You cannot bid on your own auction.' });
+            }
+
+            const currentBid = parseFloat(auction.lastbid || auction.itemprice) || 0;
+            const minBid = currentBid + Math.max(1, currentBid * 0.01); // Minimum 1% increase or 1 point
+            const buyoutPrice = auction.buyoutprice ? parseFloat(auction.buyoutprice) : null;
+
+            // Validate bid amount
+            if (bidAmountNum <= currentBid) {
+              return interaction.editReply({ content: `❌ Bid must be higher than current bid of ${currentBid} points.` });
+            }
+
+            if (bidAmountNum < minBid) {
+              return interaction.editReply({ content: `❌ Bid must be at least ${Math.ceil(minBid)} points.` });
+            }
+
+            // Check if bid reaches or exceeds buyout price
+            const reachesBuyout = buyoutPrice && bidAmountNum >= buyoutPrice;
+            const finalBid = reachesBuyout ? buyoutPrice : bidAmountNum;
+            const finalStatus = reachesBuyout ? 'completed' : 'active';
+
+            // Update auction with new bid
+            await auction.update({
+              lastbid: finalBid,
+              buyername: bidder.username1 || bidder.discordid,
+              buyerid: bidder.id || null,
+              buyerUsername: bidder.username1 || null,
+              status: finalStatus
+            });
+
+            // If bid reaches buyout price, create win file immediately and delete auction message
+            if (reachesBuyout) {
+              // Delete the auction message since auction is completed
+              await this.deleteAuctionMessage(auction, 'manual bid buyout');
+
+              try {
+                await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
+                console.log(`[AuctionManualBid] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Manual bid reached buyout)`);
+              } catch (fileError) {
+                console.error('[AuctionManualBid] Error creating win file:', fileError);
+              }
+            }
+
+            // Prepare response message
+            let responseContent = `✅ Manual bid placed!\nAuction #${auction.itemid} • ${auction.itemname}\n`;
+
+            if (reachesBuyout) {
+              responseContent += `🎉 **AUCTION WON!**\nYour bid of ${bidAmountNum} points reached/exceeded the buyout price of ${buyoutPrice} points!\n**Winner:** ${bidder.username1 || user.username}\n\nThe auction is now complete and the item will be delivered!`;
+
+              // Send public announcement for manual bid buyout
+              try {
+                await channel.send(`🏆 **MANUAL BID BUYOUT!**\n` +
+                  `**${bidder.username1 || user.username}**'s manual bid of **${bidAmountNum} points** reached the buyout price!\n` +
+                  `**Item:** ${auction.itemname} • **Final Price:** ${buyoutPrice} points\n` +
+                  `**Auction ID:** #${auction.itemid}`);
+              } catch (announcementError) {
+                console.error('Failed to send manual bid buyout announcement:', announcementError);
+              }
+            } else {
+              responseContent += `New current bid: ${finalBid} points\nBidder: ${bidder.username1 || user.username}`;
+              if (buyoutPrice) {
+                responseContent += `\n💡 **Tip:** Buyout available at ${buyoutPrice} points`;
+              }
+            }
+
+            await interaction.editReply({ content: responseContent });
+
+          } catch (error) {
+            console.error('Error handling manual bid modal:', error);
+            if (interaction.deferred) {
+              await interaction.editReply({ content: '❌ An error occurred while processing your manual bid.' });
+            } else {
+              await interaction.reply({ content: '❌ An error occurred while processing your manual bid.', ephemeral: true });
+            }
+          }
+        }
+        return;
+      }
+
+      // Handle button interactions
       if (!interaction.isButton()) return;
 
       const { customId, user, channel } = interaction;
 
-      // Check if interaction is in auction channel
       const auctionChannelId = config.get('discord.auctionChannelId');
 
       if (!auctionChannelId) {
@@ -1941,15 +2016,206 @@ export class DiscordBot {
       }
 
       try {
-        if (customId.startsWith('bid_')) {
-          // Handle bid button clicks
+        if (customId.startsWith('bid_') || customId.startsWith('bidv2_')) {
+          // Handle bid button clicks (both old 'bid_' and new 'bidv2_' formats)
+          const auctionId = customId.split('_')[1];
+          await interaction.deferReply({ ephemeral: true });
+
+          const auction = await PlayerAuction.findByPk(auctionId);
+          if (!auction) {
+            return interaction.editReply({ content: 'Auction not found or no longer active.' });
+          }
+          if (auction.status !== 'active') {
+            return interaction.editReply({ content: 'This auction is not active.' });
+          }
+
+          const bidderDiscordId = String(user.username);
+          const bidder = await ZMUser.findOne({ where: { discordid: bidderDiscordId } });
+          // console.log('Bidder info:', bidderDiscordId, bidder ? bidder.username1 : 'No user found');
+          if (!bidder) {
+            return interaction.editReply({
+              content: '❌ **Whitelisted users only!**\n\nOnly whitelisted users can use auction features.\n\n**Already whitelisted?** Please open a support ticket if you\'re still unable to use this feature.'
+            });
+          }
+
+          const startingPrice = parseFloat(auction.itemprice) || 0;
+          const lastBid = parseFloat(auction.lastbid || auction.itemprice) || 0;
+          const buyoutPrice = auction.buyoutprice ? parseFloat(auction.buyoutprice) : null;
+
+          // Check if current bid has already reached buyout price
+          if (buyoutPrice && lastBid >= buyoutPrice) {
+            return interaction.editReply({
+              content: `❌ **Auction at buyout price!**\n\nThis auction has already reached the buyout price of ${buyoutPrice} points.\nCurrent bid: ${lastBid} points\n\nUse the buyout button if you want to purchase instantly.`
+            });
+          }
+
+          const increment = Math.max(0, startingPrice * 0.10);
+          const newBid = lastBid + increment;
+
+          // Check if new bid reaches or exceeds buyout price
+          const reachesBuyout = buyoutPrice && newBid >= buyoutPrice;
+          const finalBid = reachesBuyout ? buyoutPrice : newBid;
+          const finalStatus = reachesBuyout ? 'completed' : 'active';
+
+          // Update auction with new bid and buyer information including buyerUsername
+          await auction.update({
+            lastbid: finalBid,
+            buyername: bidder.username1 || bidder.discordid,
+            buyerid: bidder.id || null,
+            buyerUsername: bidder.username1 || null,
+            status: finalStatus
+          });
+
+          // If bid reaches buyout price, create win file immediately and delete auction message
+          if (reachesBuyout) {
+            // Delete the auction message since auction is completed
+            await this.deleteAuctionMessage(auction, 'auto bid buyout');
+
+            try {
+              await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
+              console.log(`[AuctionAutoBuyout] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Bid reached buyout)`);
+            } catch (fileError) {
+              console.error('[AuctionAutoBuyout] Error creating win file:', fileError);
+            }
+          }
+
+          // Prepare response message
+          let responseContent = `✅ Bid placed!\nAuction #${auction.itemid} • ${auction.itemname}\n`;
+
+          if (reachesBuyout) {
+            responseContent += `🎉 **AUCTION WON!**\nYour bid of ${newBid} points reached the buyout price of ${buyoutPrice} points!\n**Winner:** ${bidder.username1 || user.username}\n\nThe auction is now complete and the item will be delivered!`;
+
+            // Send public announcement for auto-buyout
+            try {
+              await channel.send(`🏆 **AUTO-BUYOUT TRIGGERED!**\n` +
+                `**${bidder.username1 || user.username}**'s bid of **${newBid} points** reached the buyout price!\n` +
+                `**Item:** ${auction.itemname} • **Final Price:** ${buyoutPrice} points\n` +
+                `**Auction ID:** #${auction.itemid}`);
+            } catch (announcementError) {
+              console.error('Failed to send auto-buyout announcement:', announcementError);
+            }
+          } else {
+            responseContent += `New current bid: ${finalBid} points (+${increment})\nBidder: ${bidder.username1 || user.username}`;
+            if (buyoutPrice) {
+              responseContent += `\n💡 **Tip:** Buyout available at ${buyoutPrice} points`;
+            }
+          }
+
+          await interaction.editReply({ content: responseContent });
+
+        } else if (customId.startsWith('buyout_')) {
+          // Handle buyout button clicks
+          const auctionId = customId.split('_')[1];
+          await interaction.deferReply({ ephemeral: true });
+
+          const auction = await PlayerAuction.findByPk(auctionId);
+          if (!auction) {
+            return interaction.editReply({ content: 'Auction not found or no longer active.' });
+          }
+          if (auction.status !== 'active') {
+            return interaction.editReply({ content: 'This auction is not active.' });
+          }
+          if (!auction.buyoutprice || parseFloat(auction.buyoutprice) <= 0) {
+            return interaction.editReply({ content: 'This auction does not have a buyout price.' });
+          }
+
+          const buyerDiscordId = String(user.username);
+          const buyer = await ZMUser.findOne({ where: { discordid: buyerDiscordId } });
+          if (!buyer) {
+            return interaction.editReply({
+              content: '❌ **Whitelisted users only!**\n\nOnly whitelisted users can use auction features.\n\n**Already whitelisted?** Please open a support ticket if you\'re still unable to use this feature.'
+            });
+          }
+
+          // Check if buyer is trying to buyout their own auction
+          if (auction.sellerid === buyer.id) {
+            return interaction.editReply({ content: 'You cannot buy out your own auction.' });
+          }
+
+          const buyoutPrice = parseFloat(auction.buyoutprice);
+
+          // Mark auction as completed with buyout and delete the auction message
+          await auction.update({
+            status: 'completed',
+            lastbid: buyoutPrice,
+            buyername: buyer.username1 || buyer.discordid,
+            buyerid: buyer.id || null,
+            buyerUsername: buyer.username1 || null
+          });
+
+          // Delete the auction message since auction is completed
+          await this.deleteAuctionMessage(auction, 'instant buyout');
+
+          // Create auction win file for instant buyout
+          try {
+            await this.sftpLogReader.createAuctionWinFile(buyer.username1, auction.toJSON());
+            console.log(`[AuctionBuyout] Created win file for ${buyer.username1} - Auction #${auction.itemid} (Buyout)`);
+          } catch (fileError) {
+            console.error('[AuctionBuyout] Error creating win file:', fileError);
+          }
+
+          await interaction.editReply({
+            content: `🎉 **BUYOUT SUCCESSFUL!**\nAuction #${auction.itemid} • ${auction.itemname}\n**Buyout Price:** ${buyoutPrice} points\n**Winner:** ${buyer.username1 || user.username}\n\nThe item has been purchased instantly and the auction is now complete!`
+          });
+
+          // Send public announcement to the channel
+          try {
+            await channel.send(`🚀 **INSTANT BUYOUT!**\n` +
+              `**${buyer.username1 || user.username}** has bought out **${auction.itemname}** for **${buyoutPrice} points**!\n` +
+              `**Auction ID:** #${auction.itemid}`);
+          } catch (announcementError) {
+            console.error('Failed to send buyout announcement:', announcementError);
+          }
+
+        } else if (customId.startsWith('manualbid_')) {
+          // Handle manual bid button clicks - show modal for bid input
           const auctionId = customId.split('_')[1];
 
-          // For now, just show a placeholder message
-          await interaction.reply({
-            content: `🚧 Bidding functionality is under development!\n**Auction ID:** ${auctionId}\n**Your User:** ${user.username}\n\nThis feature will be implemented soon.`,
-            ephemeral: true
-          });
+          const auction = await PlayerAuction.findByPk(auctionId);
+          if (!auction) {
+            return interaction.reply({ content: 'Auction not found or no longer active.', ephemeral: true });
+          }
+          if (auction.status !== 'active') {
+            return interaction.reply({ content: 'This auction is not active.', ephemeral: true });
+          }
+
+          const bidderDiscordId = String(user.username);
+          const bidder = await ZMUser.findOne({ where: { discordid: bidderDiscordId } });
+
+          if (!bidder) {
+            return interaction.reply({
+              content: '❌ **Whitelisted users only!**\n\nOnly whitelisted users can use auction features.\n\n**Already whitelisted?** Please open a support ticket if you\'re still unable to use this feature.',
+              ephemeral: true
+            });
+          }
+
+          // Check if bidder is trying to bid on their own auction
+          if (auction.sellerid === bidder.id) {
+            return interaction.reply({ content: 'You cannot bid on your own auction.', ephemeral: true });
+          }
+
+          const currentBid = parseFloat(auction.lastbid || auction.itemprice) || 0;
+          const minBid = currentBid + Math.max(1, currentBid * 0.01); // Minimum 1% increase or 1 point
+          const buyoutPrice = auction.buyoutprice ? parseFloat(auction.buyoutprice) : null;
+
+          // Create modal for bid input
+          const modal = new ModalBuilder()
+            .setCustomId(`manualbid_modal_${auctionId}`)
+            .setTitle(`Manual Bid - ${auction.itemname}`);
+
+          const bidInput = new TextInputBuilder()
+            .setCustomId('bid_amount')
+            .setLabel(`Bid Amount (Current: ${currentBid} points)`)
+            .setPlaceholder(`Enter bid amount (min: ${Math.ceil(minBid)} points)`)
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(10);
+
+          const firstActionRow = new ActionRowBuilder().addComponents(bidInput);
+          modal.addComponents(firstActionRow);
+
+          await interaction.showModal(modal);
 
         } else if (customId === 'refresh_auctions') {
           // Handle refresh button
@@ -2098,16 +2364,21 @@ export class DiscordBot {
         .setDescription(`Found **${activeAuctions.length}** active auction(s)`)
         .setColor(0xe74c3c)
         .setTimestamp()
-        .setFooter({ text: 'Click "Bid" to place a bid on an item' });
+        .setFooter({ text: 'Click "Bid" to place a bid or "Buyout" to purchase instantly' });
 
       // Add auction fields
       for (let i = 0; i < activeAuctions.length && i < 5; i++) {
         const auction = activeAuctions[i];
         const seller = auction.seller || {};
 
+        const buyoutInfo = auction.buyoutprice && parseFloat(auction.buyoutprice) > 0
+          ? `**Buyout:** ${auction.buyoutprice} points`
+          : '**Buyout:** Not available';
+
         const fieldValue = [
           `**Seller:** ${seller.username1 || 'Unknown'}`,
           `**Current Bid:** ${auction.lastbid || auction.itemprice} points`,
+          buyoutInfo,
           `**Description:** ${auction.itemdesc || 'No description'}`,
           `**ID:** ${auction.itemid}`
         ].join('\n');
@@ -2119,25 +2390,44 @@ export class DiscordBot {
         });
       }
 
-      // Create bid buttons (max 5 buttons per row)
+      // Create bid and buyout buttons
       const rows = [];
-      const buttonsPerRow = 5;
+      const maxButtonsPerRow = 5;
 
-      for (let i = 0; i < Math.min(activeAuctions.length, 10); i += buttonsPerRow) {
-        const row = new ActionRowBuilder();
+      // Create bid buttons row
+      const bidRow = new ActionRowBuilder();
+      for (let i = 0; i < Math.min(activeAuctions.length, maxButtonsPerRow); i++) {
+        const auction = activeAuctions[i];
+        bidRow.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`bidv2_${auction.itemid}`)
+            .setLabel(`Bid #${i + 1}`)
+            .setStyle(ButtonStyle.Primary)
+            .setEmoji('💰')
+        );
+      }
+      if (bidRow.components.length > 0) {
+        rows.push(bidRow);
+      }
 
-        for (let j = i; j < Math.min(i + buttonsPerRow, activeAuctions.length); j++) {
-          const auction = activeAuctions[j];
-          row.addComponents(
+      // Create buyout buttons row for items that have buyout prices
+      const buyoutRow = new ActionRowBuilder();
+      let buyoutCount = 0;
+      for (let i = 0; i < Math.min(activeAuctions.length, maxButtonsPerRow); i++) {
+        const auction = activeAuctions[i];
+        if (auction.buyoutprice && parseFloat(auction.buyoutprice) > 0) {
+          buyoutRow.addComponents(
             new ButtonBuilder()
-              .setCustomId(`bidv2_${auction.itemid}`)
-              .setLabel(`Bid #${j + 1}`)
-              .setStyle(ButtonStyle.Primary)
-              .setEmoji('💰')
+              .setCustomId(`buyout_${auction.itemid}`)
+              .setLabel(`Buyout #${i + 1}`)
+              .setStyle(ButtonStyle.Success)
+              .setEmoji('⚡')
           );
+          buyoutCount++;
         }
-
-        rows.push(row);
+      }
+      if (buyoutRow.components.length > 0) {
+        rows.push(buyoutRow);
       }
 
       // Add refresh button
@@ -2173,6 +2463,159 @@ export class DiscordBot {
     } catch (error) {
       console.error('Error in displayAuctionList:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Delete Discord message for an auction
+   * @param {Object} auction - Auction object with discordMessageId
+   * @param {string} reason - Reason for deletion (e.g., "expired", "completed")
+   */
+  async deleteAuctionMessage(auction, reason = 'completed') {
+    try {
+      if (!auction.discordMessageId) {
+        return; // No message ID stored
+      }
+
+      const auctionChannelId = config.get('discord.auctionChannelId');
+      if (!auctionChannelId) {
+        console.warn('[MessageDelete] Auction channel not configured');
+        return;
+      }
+
+      const channel = this.client.channels.cache.get(auctionChannelId);
+      if (!channel) {
+        console.warn(`[MessageDelete] Auction channel not found: ${auctionChannelId}`);
+        return;
+      }
+
+      try {
+        const message = await channel.messages.fetch(auction.discordMessageId);
+        if (message) {
+          await message.delete();
+          console.log(`[MessageDelete] Deleted Discord message ${auction.discordMessageId} for auction #${auction.itemid} (${reason})`);
+        }
+      } catch (fetchError) {
+        if (fetchError.code === 10008) {
+          // Message not found (already deleted)
+          console.log(`[MessageDelete] Message ${auction.discordMessageId} already deleted for auction #${auction.itemid}`);
+        } else {
+          console.warn(`[MessageDelete] Failed to fetch/delete message ${auction.discordMessageId}:`, fetchError.message);
+        }
+      }
+    } catch (error) {
+      console.error(`[MessageDelete] Error deleting auction message:`, error);
+    }
+  }
+
+  /**
+   * Check for expired auctions and process winners
+   * This should be called periodically or triggered by auction expiry events
+   */
+  async processExpiredAuctions() {
+    try {
+      // Find auctions that are active but expired (older than 24 hours since creation)
+      // You can adjust the expiry time based on your auction system requirements
+      const expiryTime = new Date();
+      expiryTime.setHours(expiryTime.getHours() - 24); // 24 hours ago
+
+      const expiredAuctions = await PlayerAuction.findAll({
+        where: {
+          status: 'active',
+          createdAt: { [Op.lt]: expiryTime } // Auctions created more than 24 hours ago
+        },
+        include: [{
+          model: ZMUser,
+          as: 'seller',
+          attributes: ['username1', 'steamid']
+        }]
+      });
+
+      for (const auction of expiredAuctions) {
+        // Delete the Discord message for this auction
+        await this.deleteAuctionMessage(auction, 'expired');
+
+        // Check if auction has a highest bidder
+        if (auction.buyerid && auction.buyerUsername && auction.lastbid) {
+          // Mark auction as completed
+          await auction.update({ status: 'completed' });
+
+          // Create auction win file for the highest bidder
+          try {
+            await this.sftpLogReader.createAuctionWinFile(auction.buyerUsername, auction.toJSON());
+            console.log(`[AuctionExpired] Created win file for ${auction.buyerUsername} - Auction #${auction.itemid} (Expired with winner)`);
+
+            // Send notification to auction channel about the winner
+            const auctionChannelId = config.get('discord.auctionChannelId');
+            if (auctionChannelId) {
+              const channel = this.client.channels.cache.get(auctionChannelId);
+              if (channel) {
+                const winnerMessage = await channel.send(`🕒 **Auction Expired - Winner Announced!**\n` +
+                  `**Item:** ${auction.itemname}\n` +
+                  `**Winner:** ${auction.buyerUsername}\n` +
+                  `**Final Bid:** ${auction.lastbid} points\n` +
+                  `**Auction ID:** #${auction.itemid}`);
+
+                // Auto-delete winner announcement after 10 minutes
+                setTimeout(async () => {
+                  try {
+                    await winnerMessage.delete();
+                    console.log(`[MessageDelete] Auto-deleted winner announcement for auction #${auction.itemid}`);
+                  } catch (deleteError) {
+                    console.warn(`[MessageDelete] Failed to auto-delete winner announcement:`, deleteError.message);
+                  }
+                }, 10 * 60 * 1000); // 10 minutes
+              }
+            }
+          } catch (fileError) {
+            console.error('[AuctionExpired] Error creating win file for winner:', fileError);
+          }
+        } else {
+          // No bidders, return item to seller
+          await auction.update({ status: 'expired' });
+
+          // Create auction win file to return item to seller
+          try {
+            // Find seller information for the win file
+            const seller = auction.seller || await ZMUser.findByPk(auction.sellerid);
+            const sellerUsername = seller?.username1 || auction.sellername || 'Unknown';
+
+            await this.sftpLogReader.createAuctionWinFile(sellerUsername, auction.toJSON());
+            console.log(`[AuctionExpired] Created win file to return item to seller ${sellerUsername} - Auction #${auction.itemid} (Expired with no bidders)`);
+
+            // Send notification about item return to seller
+            const auctionChannelId = config.get('discord.auctionChannelId');
+            if (auctionChannelId) {
+              const channel = this.client.channels.cache.get(auctionChannelId);
+              if (channel) {
+                const returnMessage = await channel.send(`🕒 **Auction Expired - Item Returned!**\n` +
+                  `**Item:** ${auction.itemname}\n` +
+                  `**Returned to Seller:** ${sellerUsername}\n` +
+                  `**Reason:** No bidders\n` +
+                  `**Auction ID:** #${auction.itemid}`);
+
+                // Auto-delete return announcement after 10 minutes
+                setTimeout(async () => {
+                  try {
+                    await returnMessage.delete();
+                    console.log(`[MessageDelete] Auto-deleted return announcement for auction #${auction.itemid}`);
+                  } catch (deleteError) {
+                    console.warn(`[MessageDelete] Failed to auto-delete return announcement:`, deleteError.message);
+                  }
+                }, 10 * 60 * 1000); // 10 minutes
+              }
+            }
+          } catch (fileError) {
+            console.error('[AuctionExpired] Error creating win file for seller return:', fileError);
+          }
+        }
+      }
+
+      if (expiredAuctions.length > 0) {
+        console.log(`[AuctionExpired] Processed ${expiredAuctions.length} expired auctions`);
+      }
+    } catch (error) {
+      console.error('[AuctionExpired] Error processing expired auctions:', error);
     }
   }
 
