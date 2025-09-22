@@ -15,6 +15,9 @@ import RPC from 'discord-rpc';
 import { BotLuaCommandManager } from './bot_luacmd.js';
 import fs from 'fs/promises';
 import path from 'path';
+import logger from '../utils/logger.js';
+// Toggle for verbose getUserPoints debug logging
+const ENABLE_POINTS_DEBUG = false;
 
 export class DiscordBot {
   constructor(token) {
@@ -857,6 +860,7 @@ export class DiscordBot {
         generalCommands += `\`${prefix}start\` - Start the server (requires confirmations or admin)\n`;
         generalCommands += `\`${prefix}checkupdate\` - Check for mod updates\n`;
         generalCommands += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n`;
+  generalCommands += `\`${prefix}syncpoint\` - Refresh your points file from the game server (use before bidding if asked)\n`;
 
         // Whitelist Commands Message
         let whitelistCommands = '**Whitelist Commands:**\n';
@@ -985,6 +989,29 @@ export class DiscordBot {
             message.channel.send('❌ Unable to send you a DM. Please check your privacy settings.');
           }
           console.error(`Error in !${command}:`, err);
+        }
+      } else if (command === 'syncpoint') {
+        // Allow all users to trigger a points file refresh
+        const provided = args.length > 0 ? args.join(' ') : null;
+        const derived = message.member?.displayName || message.author.username;
+        const username = (provided || derived || '').trim();
+
+        if (!username) {
+          return message.channel.send('❌ Unable to determine username. Provide one like `!syncpoint MyPlayerName`');
+        }
+
+        // Basic sanity check (avoid accidental huge injections). Allow spaces but limit length.
+        if (username.length > 40) {
+          return message.channel.send('❌ Username seems too long. Please check and try again.');
+        }
+
+        try {
+          await message.channel.send(`🔄 Syncing points for **${username}**... (this usually takes ~5 seconds)`);
+          await wrappedRconClient.send(`luacmd clientexe ${username} dumpPlayerPoints`);
+          await message.channel.send(`✅ Points sync requested for **${username}**. Try your auction action again shortly.`);
+        } catch (error) {
+          console.error('Error executing syncpoint command:', error);
+          await message.channel.send(`❌ Failed to sync points for **${username}**: ${error.message}`);
         }
       } else if (command === 'start') {
         try {
@@ -1942,6 +1969,21 @@ export class DiscordBot {
             const finalBid = reachesBuyout ? buyoutPrice : bidAmountNum;
             const finalStatus = reachesBuyout ? 'completed' : 'active';
 
+            // Points validation (must have points file and enough points >= finalBid)
+            const bidderNameForPoints = bidder.username1 || bidder.discordid || user.username;
+            console.log(`Checking points for bidder: ${bidderNameForPoints}`);
+            const pointsInfo = await this.getUserPoints(bidderNameForPoints);
+            console.log({pointsInfo});
+            if (!pointsInfo.exists) {
+              return interaction.editReply({ content: '❌ Points data not found. Please sync your points first.' });
+            }
+            if (pointsInfo.points == null) {
+              return interaction.editReply({ content: '❌ Your points file is unreadable. Please sync your points and try again.' });
+            }
+            if (pointsInfo.points < finalBid) {
+              return interaction.editReply({ content: `❌ Insufficient points. You have ${pointsInfo.points} points but need at least ${finalBid} points for this bid.` });
+            }
+
             // Update auction with new bid
             await auction.update({
               lastbid: finalBid,
@@ -2057,6 +2099,22 @@ export class DiscordBot {
           const finalBid = reachesBuyout ? buyoutPrice : newBid;
           const finalStatus = reachesBuyout ? 'completed' : 'active';
 
+          // Points validation for auto bid
+          const bidderNameForPoints = bidder.username1 || bidder.discordid || user.username;
+          console.log(`Checking points for bidder: ${bidderNameForPoints}`);
+          const pointsInfo = await this.getUserPoints(bidderNameForPoints);
+          console.log({pointsInfo});
+          if (!pointsInfo.exists) {
+            return interaction.editReply({ content: '❌ Points data not found. Please sync your points first.' });
+          }
+          if (pointsInfo.points == null) {
+            return interaction.editReply({ content: '❌ Your points file is unreadable. Please sync your points and try again.' });
+          }
+            // Need enough points to cover finalBid (potential buyout) or new bid
+          if (pointsInfo.points < finalBid) {
+            return interaction.editReply({ content: `❌ Insufficient points. You have ${pointsInfo.points} points but need at least ${finalBid} points for this bid.` });
+          }
+
           // Update auction with new bid and buyer information including buyerUsername
           await auction.update({
             lastbid: finalBid,
@@ -2133,6 +2191,21 @@ export class DiscordBot {
           }
 
           const buyoutPrice = parseFloat(auction.buyoutprice);
+
+          // Points validation for buyout
+          const buyerNameForPoints = buyer.username1 || buyer.discordid || user.username;
+          console.log(`Checking points for buyer: ${buyerNameForPoints}`);
+          const buyoutPointsInfo = await this.getUserPoints(buyerNameForPoints);
+          console.log({buyoutPointsInfo});
+          if (!buyoutPointsInfo.exists) {
+            return interaction.editReply({ content: '❌ Points data not found. Please sync your points first.' });
+          }
+          if (buyoutPointsInfo.points == null) {
+            return interaction.editReply({ content: '❌ Your points file is unreadable. Please sync your points and try again.' });
+          }
+          if (buyoutPointsInfo.points < buyoutPrice) {
+            return interaction.editReply({ content: `❌ Insufficient points. You have ${buyoutPointsInfo.points} points but need ${buyoutPrice} points for buyout.` });
+          }
 
           // Mark auction as completed with buyout and delete the auction message
           await auction.update({
@@ -2240,6 +2313,111 @@ export class DiscordBot {
         }
       }
     });
+  }
+
+  /**
+   * Read current server points for a username from bridge file generated by ServerPointsCommands.bridge
+   * File format:
+   *   Time=...
+   *   Username=<name>
+   *   Points=<integer>
+   * Directory expected relative to project root at ../Serverpoints/<username>.points.txt
+   * @param {string} username
+   * @returns {Promise<{exists:boolean, points:number|null, error?:string}>}
+   */
+  async getUserPoints(username) {
+    const debug = [];
+    const startTs = Date.now();
+    try {
+      if (!username) {
+        debug.push('missing username param');
+        logger.warn('[getUserPoints] Called without username');
+        return { exists: false, points: null, error: 'missing-username', debug };
+      }
+
+      // Normalize username (strip surrounding quotes just in case)
+      const normalizedUsername = username.replace(/^"|"$/g, '').trim();
+      if (normalizedUsername !== username) {
+        debug.push(`normalized from '${username}' to '${normalizedUsername}'`);
+      }
+
+      // 1. Attempt LOCAL filesystem lookup
+      const rootDir = path.resolve(process.cwd(), '..');
+      const pointsDirCandidates = [
+        path.join(rootDir, 'Serverpoints'), // typical alongside Deposits folder
+        path.join(process.cwd(), 'Serverpoints'),
+        path.join(process.cwd(), '..', 'Serverpoints')
+      ];
+      let filePath = null;
+      for (const dir of pointsDirCandidates) {
+        const candidate = path.join(dir, `${normalizedUsername}.points.txt`);
+        try {
+          await fs.access(candidate);
+          filePath = candidate;
+          debug.push(`local-hit:${candidate}`);
+          break;
+        } catch {
+          debug.push(`miss:${candidate}`);
+        }
+      }
+
+      if (filePath) {
+  if (ENABLE_POINTS_DEBUG) logger.debug(`[getUserPoints] Local file FOUND for ${normalizedUsername}: ${filePath}`);
+        const content = await fs.readFile(filePath, 'utf8');
+        const match = content.match(/Points=(\d+)/i);
+        if (!match) {
+          debug.push('format-miss: no Points= line');
+          return { exists: true, points: null, error: 'format', debug };
+        }
+        const points = parseInt(match[1], 10);
+        if (isNaN(points)) {
+          debug.push('nan-after-parse');
+          return { exists: true, points: null, error: 'nan', debug };
+        }
+        debug.push('success-local');
+        return { exists: true, points, source: 'local', debug };
+      }
+
+      // 2. Remote SFTP fallback (server authoritative) - only if local not found
+      debug.push('attempt-remote');
+      const remoteDir = '/home/pzserver/Zomboid/Lua/Serverpoints';
+      const remoteFilePath = `${remoteDir}/${normalizedUsername}.points.txt`;
+      try {
+        await this.sftpLogReader.connect();
+        let remoteContent;
+        try {
+          remoteContent = await this.sftpLogReader.sftp.get(remoteFilePath);
+        } catch (remoteErr) {
+          debug.push('remote-miss:' + remoteErr.message);
+          if (ENABLE_POINTS_DEBUG) logger.debug(`[getUserPoints] Remote file NOT found for ${normalizedUsername}: ${remoteFilePath}`);
+          return { exists: false, points: null, error: 'not-found', debug };
+        }
+
+        const contentStr = remoteContent.toString('utf8');
+        const match = contentStr.match(/Points=(\d+)/i);
+        if (!match) {
+          debug.push('remote-format-miss');
+          return { exists: true, points: null, error: 'format', source: 'remote', debug };
+        }
+        const points = parseInt(match[1], 10);
+        if (isNaN(points)) {
+          debug.push('remote-nan');
+          return { exists: true, points: null, error: 'nan', source: 'remote', debug };
+        }
+        debug.push('success-remote');
+        if (ENABLE_POINTS_DEBUG) logger.debug(`[getUserPoints] Remote points read for ${normalizedUsername}: ${points}`);
+        return { exists: true, points, source: 'remote', debug };
+      } finally {
+        try { await this.sftpLogReader.disconnect(); } catch {}
+      }
+    } catch (err) {
+      debug.push('exception:' + err.message);
+      logger.error(`[getUserPoints] Exception for ${username}: ${err.message}`);
+      return { exists: false, points: null, error: 'exception:' + err.message, debug };
+    } finally {
+      const duration = Date.now() - startTs;
+      if (ENABLE_POINTS_DEBUG) logger.debug(`[getUserPoints] Finished for ${username} in ${duration}ms`);
+    }
   }
 
   async sendCronNotification(jobType, success, executionTime, errorMessage = null) {
