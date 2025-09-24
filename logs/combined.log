@@ -110,3 +110,196 @@
 {"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-11T07:38:44Z","timestamp":"2025-09-11T07:41:50.754Z"}
 {"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #4: Mystic Orb Weapon by tester2","timestamp":"2025-09-11T07:41:51.392Z"}
 {"level":"info","message":"[AuctionLogMonitor] ✅ Sent auction notification for item: Mystic Orb Weapon","timestamp":"2025-09-11T07:41:52.026Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stopping auction log monitoring...","timestamp":"2025-09-11T08:49:20.843Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:19:24.769Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:19:26.827Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T04:19:27.679Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:19:27.680Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T04:19:58.717Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T04:12:20Z","timestamp":"2025-09-12T04:19:58.718Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #5: Military Backpack Echo (Black) by tester2","timestamp":"2025-09-12T04:19:59.087Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Sent auction notification for item: Military Backpack Echo (Black)","timestamp":"2025-09-12T04:19:59.755Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:22:59.590Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:23:01.454Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T04:23:02.211Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:23:02.211Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:23:04.826Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:23:06.455Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 565","timestamp":"2025-09-12T04:23:07.236Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:23:07.237Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:24:25.454Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:24:27.365Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:24:29.063Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:24:31.869Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 565","timestamp":"2025-09-12T04:24:32.679Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:24:32.679Z"}
+{"level":"info","message":"[AuctionLogMonitor] Manual scan requested","timestamp":"2025-09-12T04:24:33.635Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T04:24:34.800Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T04:12:20Z","timestamp":"2025-09-12T04:24:34.800Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #6: Military Backpack Echo (Black) by tester2","timestamp":"2025-09-12T04:24:34.928Z"}
+{"level":"warn","message":"[AuctionLogMonitor] Discord client not available for notifications","timestamp":"2025-09-12T04:24:34.929Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T04:24:35.870Z"}
+{"level":"info","message":"[AuctionLogMonitor] Manual scan requested","timestamp":"2025-09-12T04:26:03.245Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:30:51.059Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:30:52.798Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T04:30:52.798Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:30:52.799Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T04:31:23.861Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T04:27:24Z","timestamp":"2025-09-12T04:31:23.862Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #7: PKM General-Purpose Machine Gun (Enhanced) by tester2","timestamp":"2025-09-12T04:31:24.336Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Sent auction notification for item: PKM General-Purpose Machine Gun (Enhanced)","timestamp":"2025-09-12T04:31:24.827Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T04:31:25.803Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:35:14.358Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:35:16.881Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T04:35:16.881Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:35:16.881Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:35:25.918Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:35:28.695Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T04:35:28.695Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:35:28.695Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T04:36:49.422Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T04:36:51.155Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T04:36:51.155Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T04:36:51.155Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T04:37:54.439Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T04:37:04Z","timestamp":"2025-09-12T04:37:54.439Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #8: PKM General-Purpose Machine Gun (Enhanced) by tester2","timestamp":"2025-09-12T04:37:55.241Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: PKM General-Purpose Machine Gun (Enhanced)","timestamp":"2025-09-12T04:37:55.947Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T04:37:58.544Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T04:45:52.334Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T04:44:17Z","timestamp":"2025-09-12T04:45:52.338Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #9: PKM General-Purpose Machine Gun (Enhanced)_tester2_+4 by tester2","timestamp":"2025-09-12T04:45:52.748Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: PKM General-Purpose Machine Gun (Enhanced)_tester2_+4","timestamp":"2025-09-12T04:45:53.182Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T04:45:54.161Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:15:53.203Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:15:58.727Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:15:58.728Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:15:58.728Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:16:28.086Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:17:05.571Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:17:27.416Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:17:27.416Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:17:27.417Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:17:56.630Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:18:04.608Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:18:12.290Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:18:12.290Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:18:12.291Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:18:15.653Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:18:18.570Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:18:20.724Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:18:22.335Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:18:27.206Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:18:27.206Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:18:27.206Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T06:19:05.815Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T06:10:38Z","timestamp":"2025-09-12T06:19:05.815Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #10: M4A1 Assault Rifle (Enhanced) by tester2","timestamp":"2025-09-12T06:19:06.888Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle (Enhanced)","timestamp":"2025-09-12T06:19:07.516Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:19:50.617Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:19:55.128Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:19:55.128Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:19:55.129Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T06:20:29.282Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T06:10:38Z","timestamp":"2025-09-12T06:20:29.283Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #11: M4A1 Assault Rifle (Enhanced) by tester2","timestamp":"2025-09-12T06:20:31.199Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle (Enhanced)","timestamp":"2025-09-12T06:20:32.033Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T06:20:38.882Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:21:02.955Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:21:11.668Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:21:11.669Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:21:11.669Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:22:13.092Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:22:17.496Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:22:17.497Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:22:17.497Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T06:22:50.488Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T06:10:38Z","timestamp":"2025-09-12T06:22:50.489Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #12: M4A1 Assault Rifle (Enhanced) by tester2","timestamp":"2025-09-12T06:22:53.824Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle (Enhanced)","timestamp":"2025-09-12T06:22:54.585Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T06:22:56.285Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:23:19.075Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:23:28.654Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:23:33.943Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:23:33.943Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:23:33.943Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T06:24:09.390Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T06:10:38Z","timestamp":"2025-09-12T06:24:09.391Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #13: M4A1 Assault Rifle (Enhanced) by tester2","timestamp":"2025-09-12T06:24:13.626Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle (Enhanced)","timestamp":"2025-09-12T06:24:14.999Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T06:24:18.675Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:33:02.467Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:33:05.407Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:33:05.407Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:33:05.408Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:33:07.666Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:33:10.969Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:33:10.969Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:33:10.969Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:34:09.815Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:34:11.933Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:34:11.933Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:34:11.934Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-12T06:34:41.980Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-12T06:35:11.991Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stopping auction log monitoring...","timestamp":"2025-09-12T06:35:35.842Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:35:40.269Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:35:41.876Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:35:41.876Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:35:41.877Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T06:36:13.023Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T06:10:38Z","timestamp":"2025-09-12T06:36:13.024Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #14: M4A1 Assault Rifle (Enhanced) by tester2","timestamp":"2025-09-12T06:36:13.506Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle (Enhanced)","timestamp":"2025-09-12T06:36:13.927Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T06:36:14.825Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T06:41:43.066Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T06:40:20Z","timestamp":"2025-09-12T06:41:43.069Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #15: Berril 5-M Vest by tester2","timestamp":"2025-09-12T06:41:43.353Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: Berril 5-M Vest","timestamp":"2025-09-12T06:41:43.767Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T06:41:44.665Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T06:57:50.272Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T06:57:52.196Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T06:57:52.196Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T06:57:52.196Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T07:00:53.236Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T07:00:26Z","timestamp":"2025-09-12T07:00:53.237Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #16: Boots by tester2","timestamp":"2025-09-12T07:00:53.629Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: Boots","timestamp":"2025-09-12T07:00:54.240Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T07:00:55.185Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-12T07:02:53.240Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-12T07:02:40Z","timestamp":"2025-09-12T07:02:53.241Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #17: Cavalry Axe by tester2","timestamp":"2025-09-12T07:02:53.604Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: Cavalry Axe","timestamp":"2025-09-12T07:02:53.986Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-12T07:02:54.901Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T07:11:02.039Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T07:11:03.969Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T07:11:03.969Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T07:11:03.970Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T07:11:07.599Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T07:11:09.492Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T07:11:09.492Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T07:11:09.492Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T07:11:12.471Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T07:11:14.120Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T07:11:14.120Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T07:11:14.121Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T07:14:26.685Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T07:14:28.535Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T07:14:28.535Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T07:14:28.535Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T07:15:41.491Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T07:15:43.187Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T07:15:43.187Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T07:15:43.187Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T07:15:46.700Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T07:15:48.471Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T07:15:48.471Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T07:15:48.471Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-12T07:16:07.827Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-12T07:16:09.769Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-12T07:16:09.771Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-12T07:16:09.771Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-12T08:46:01.183Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-16T16:45:00Z","timestamp":"2025-09-16T03:16:56.210Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #25: Mystic Katana of Fire by EnchantedCrafter","timestamp":"2025-09-16T03:16:56.297Z"}
+{"level":"warn","message":"[AuctionLogMonitor] Discord client not available for notifications","timestamp":"2025-09-16T03:16:56.297Z"}

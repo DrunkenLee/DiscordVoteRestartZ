@@ -583,7 +583,7 @@ export class DiscordBot {
                       .on('error', reject)
                       .connect(sshConfig);
                   });
-                  await message.channel.send('Server restart command sent via SSH. Server will restart now.');
+                  await message.channel.send('Server restart command sent. Server will restart now.');
                   this.lastRestartTime = Date.now();
                 }, 60000); // 1 minute
               } catch (restartError) {
@@ -1002,7 +1002,7 @@ export class DiscordBot {
 
         // Basic sanity check (avoid accidental huge injections). Allow spaces but limit length.
         if (username.length > 40) {
-          return message.channel.send('❌ Username seems too long. Please check and try again.');
+          return message.channel.send('❌ Username seems to long. Please check and try again.');
         }
 
         try {
@@ -1875,7 +1875,7 @@ export class DiscordBot {
 
     // Auction expiry checker - runs every 5 minutes
     cron.schedule(
-      '*/5 * * * *',
+      '*/1 * * * *',
       async () => {
         const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
         try {
@@ -1969,11 +1969,11 @@ export class DiscordBot {
             const finalBid = reachesBuyout ? buyoutPrice : bidAmountNum;
             const finalStatus = reachesBuyout ? 'completed' : 'active';
 
-            // Points validation (must have points file and enough points >= finalBid)
+            // Points refresh + validation (force dump, then read latest)
             const bidderNameForPoints = bidder.username1 || bidder.discordid || user.username;
-            console.log(`Checking points for bidder: ${bidderNameForPoints}`);
-            const pointsInfo = await this.getUserPoints(bidderNameForPoints);
-            console.log({pointsInfo});
+            const dumpName = bidder.username1 || bidderNameForPoints;
+            await this.dumpPlayerPoints(dumpName).catch(() => {});
+            const pointsInfo = await this.refreshAndGetPoints(dumpName, 3, 900);
             if (!pointsInfo.exists) {
               return interaction.editReply({ content: '❌ Points data not found. Please sync your points first.' });
             }
@@ -1996,13 +1996,20 @@ export class DiscordBot {
             // If bid reaches buyout price, create win file immediately and delete auction message
             if (reachesBuyout) {
               // Delete the auction message since auction is completed
-              await this.deleteAuctionMessage(auction, 'manual bid buyout');
+              await this.deleteAuctionMessage(auction, 'auto bid buyout');
 
               try {
-                await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
-                console.log(`[AuctionManualBid] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Manual bid reached buyout)`);
+                if (!auction.winnerWinFileCreated) {
+                  await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
+                  await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
+                  console.log(`[AuctionAutoBuyout] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Bid reached buyout)`);
+                } else {
+                  // Alternate file creation: append a .retry marker file
+                  await this.sftpLogReader.createAuctionWinFile(`${bidder.username1}.retry`, auction.toJSON());
+                  console.log(`[AuctionAutoBuyout] Duplicate detected, created retry win file for ${bidder.username1} - Auction #${auction.itemid}`);
+                }
               } catch (fileError) {
-                console.error('[AuctionManualBid] Error creating win file:', fileError);
+                console.error('[AuctionAutoBuyout] Error creating win file:', fileError);
               }
             }
 
@@ -2099,18 +2106,18 @@ export class DiscordBot {
           const finalBid = reachesBuyout ? buyoutPrice : newBid;
           const finalStatus = reachesBuyout ? 'completed' : 'active';
 
-          // Points validation for auto bid
+          // Points refresh + validation for auto bid
           const bidderNameForPoints = bidder.username1 || bidder.discordid || user.username;
-          console.log(`Checking points for bidder: ${bidderNameForPoints}`);
-          const pointsInfo = await this.getUserPoints(bidderNameForPoints);
-          console.log({pointsInfo});
+          const dumpName = bidder.username1 || bidderNameForPoints;
+          await this.dumpPlayerPoints(dumpName).catch(() => {});
+          const pointsInfo = await this.refreshAndGetPoints(dumpName, 3, 900);
           if (!pointsInfo.exists) {
             return interaction.editReply({ content: '❌ Points data not found. Please sync your points first.' });
           }
           if (pointsInfo.points == null) {
             return interaction.editReply({ content: '❌ Your points file is unreadable. Please sync your points and try again.' });
           }
-            // Need enough points to cover finalBid (potential buyout) or new bid
+          // Need enough points to cover finalBid (potential buyout) or new bid
           if (pointsInfo.points < finalBid) {
             return interaction.editReply({ content: `❌ Insufficient points. You have ${pointsInfo.points} points but need at least ${finalBid} points for this bid.` });
           }
@@ -2130,8 +2137,15 @@ export class DiscordBot {
             await this.deleteAuctionMessage(auction, 'auto bid buyout');
 
             try {
-              await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
-              console.log(`[AuctionAutoBuyout] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Bid reached buyout)`);
+              if (!auction.winnerWinFileCreated) {
+                await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
+                await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
+                console.log(`[AuctionAutoBuyout] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Bid reached buyout)`);
+              } else {
+                // Alternate file creation: append a .retry marker file
+                await this.sftpLogReader.createAuctionWinFile(`${bidder.username1}.retry`, auction.toJSON());
+                console.log(`[AuctionAutoBuyout] Duplicate detected, created retry win file for ${bidder.username1} - Auction #${auction.itemid}`);
+              }
             } catch (fileError) {
               console.error('[AuctionAutoBuyout] Error creating win file:', fileError);
             }
@@ -2146,8 +2160,7 @@ export class DiscordBot {
             // Send public announcement for auto-buyout
             try {
               await channel.send(`🏆 **AUTO-BUYOUT TRIGGERED!**\n` +
-                `**${bidder.username1 || user.username}**'s bid of **${newBid} points** reached the buyout price!\n` +
-                `**Item:** ${auction.itemname} • **Final Price:** ${buyoutPrice} points\n` +
+                `**${bidder.username1 || user.username}** has bought out **${auction.itemname}** for **${buyoutPrice} points**!\n` +
                 `**Auction ID:** #${auction.itemid}`);
             } catch (announcementError) {
               console.error('Failed to send auto-buyout announcement:', announcementError);
@@ -2192,11 +2205,11 @@ export class DiscordBot {
 
           const buyoutPrice = parseFloat(auction.buyoutprice);
 
-          // Points validation for buyout
+          // Points refresh + validation for buyout
           const buyerNameForPoints = buyer.username1 || buyer.discordid || user.username;
-          console.log(`Checking points for buyer: ${buyerNameForPoints}`);
-          const buyoutPointsInfo = await this.getUserPoints(buyerNameForPoints);
-          console.log({buyoutPointsInfo});
+          const dumpName = buyer.username1 || buyerNameForPoints;
+          await this.dumpPlayerPoints(dumpName).catch(() => {});
+          const buyoutPointsInfo = await this.refreshAndGetPoints(dumpName, 3, 900);
           if (!buyoutPointsInfo.exists) {
             return interaction.editReply({ content: '❌ Points data not found. Please sync your points first.' });
           }
@@ -2221,8 +2234,14 @@ export class DiscordBot {
 
           // Create auction win file for instant buyout
           try {
-            await this.sftpLogReader.createAuctionWinFile(buyer.username1, auction.toJSON());
-            console.log(`[AuctionBuyout] Created win file for ${buyer.username1} - Auction #${auction.itemid} (Buyout)`);
+            if (!auction.winnerWinFileCreated) {
+              await this.sftpLogReader.createAuctionWinFile(buyer.username1, auction.toJSON());
+              await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
+              console.log(`[AuctionBuyout] Created win file for ${buyer.username1} - Auction #${auction.itemid} (Buyout)`);
+            } else {
+              await this.sftpLogReader.createAuctionWinFile(`${buyer.username1}.retry`, auction.toJSON());
+              console.log(`[AuctionBuyout] Duplicate detected, created retry win file for ${buyer.username1} - Auction #${auction.itemid}`);
+            }
           } catch (fileError) {
             console.error('[AuctionBuyout] Error creating win file:', fileError);
           }
@@ -2509,6 +2528,39 @@ export class DiscordBot {
   }
 
   /**
+   * Ask the game to dump latest points for a username via RCON
+   * @param {string} username
+   */
+  async dumpPlayerPoints(username) {
+    try {
+      if (!username) return false;
+      const safeName = username.replace(/^"|"$/g, '').trim();
+      await this.wrappedRconClient?.send(`luacmd clientexe ${safeName} dumpPlayerPoints`);
+      return true;
+    } catch (e) {
+      // Non-fatal for validation; we will still try to read existing file
+      return false;
+    }
+  }
+
+  /**
+   * Force a dump then retry read a few times to get fresh points
+   * @param {string} username
+   * @param {number} retries
+   * @param {number} delayMs
+   */
+  async refreshAndGetPoints(username, retries = 3, delayMs = 800) {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    let last = { exists: false, points: null };
+    for (let i = 0; i < Math.max(1, retries); i++) {
+      last = await this.getUserPoints(username);
+      if (last.exists && last.points != null) return last;
+      await wait(delayMs);
+    }
+    return last;
+  }
+
+  /**
    * Display auction list with bid buttons
    * @param {Message} message - Discord message object
    */
@@ -2692,38 +2744,51 @@ export class DiscordBot {
    */
   async processExpiredAuctions() {
     try {
-      // Find auctions that are active but expired (older than 24 hours since creation)
-      // You can adjust the expiry time based on your auction system requirements
       const expiryTime = new Date();
       expiryTime.setHours(expiryTime.getHours() - 24); // 24 hours ago
 
-      const expiredAuctions = await PlayerAuction.findAll({
+      // A) Auctions that timed-out by age (still marked active)
+      const timedOut = await PlayerAuction.findAll({
         where: {
           status: 'active',
-          createdAt: { [Op.lt]: expiryTime } // Auctions created more than 24 hours ago
+          createdAt: { [Op.lt]: expiryTime }
         },
-        include: [{
-          model: ZMUser,
-          as: 'seller',
-          attributes: ['username1', 'steamid']
-        }]
+        include: [{ model: ZMUser, as: 'seller', attributes: ['username1', 'steamid'] }]
       });
 
-      for (const auction of expiredAuctions) {
-        // Delete the Discord message for this auction
+      // B) Auctions already marked as expired in DB (ensure cleanup + win file)
+      const markedExpired = await PlayerAuction.findAll({
+        where: { status: 'expired' },
+        include: [{ model: ZMUser, as: 'seller', attributes: ['username1', 'steamid'] }]
+      });
+
+      // Merge without duplicates
+      const byId = new Map();
+      for (const a of timedOut) byId.set(a.id, a);
+      for (const a of markedExpired) byId.set(a.id, a);
+      const toProcess = Array.from(byId.values());
+
+      for (const auction of toProcess) {
+        // Always try to remove the Discord message
         await this.deleteAuctionMessage(auction, 'expired');
 
-        // Check if auction has a highest bidder
-        if (auction.buyerid && auction.buyerUsername && auction.lastbid) {
-          // Mark auction as completed
-          await auction.update({ status: 'completed' });
-
-          // Create auction win file for the highest bidder
+        const hasWinner = !!(auction.buyerid && auction.buyerUsername && auction.lastbid);
+        if (hasWinner) {
+          // Ensure completed status
+          if (auction.status !== 'completed') {
+            await auction.update({ status: 'completed' });
+          }
+          // Create win file for winner
           try {
-            await this.sftpLogReader.createAuctionWinFile(auction.buyerUsername, auction.toJSON());
-            console.log(`[AuctionExpired] Created win file for ${auction.buyerUsername} - Auction #${auction.itemid} (Expired with winner)`);
+            if (!auction.winnerWinFileCreated) {
+              await this.sftpLogReader.createAuctionWinFile(auction.buyerUsername, auction.toJSON());
+              await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
+              console.log(`[AuctionExpired] Created win file for ${auction.buyerUsername} - Auction #${auction.itemid} (Expired with winner)`);
+            } else {
+              await this.sftpLogReader.createAuctionWinFile(`${auction.buyerUsername}.retry`, auction.toJSON());
+              console.log(`[AuctionExpired] Duplicate detected, created retry win file for ${auction.buyerUsername} - Auction #${auction.itemid}`);
+            }
 
-            // Send notification to auction channel about the winner
             const auctionChannelId = config.get('discord.auctionChannelId');
             if (auctionChannelId) {
               const channel = this.client.channels.cache.get(auctionChannelId);
@@ -2733,35 +2798,32 @@ export class DiscordBot {
                   `**Winner:** ${auction.buyerUsername}\n` +
                   `**Final Bid:** ${auction.lastbid} points\n` +
                   `**Auction ID:** #${auction.itemid}`);
-
-                // Auto-delete winner announcement after 10 minutes
                 setTimeout(async () => {
-                  try {
-                    await winnerMessage.delete();
-                    console.log(`[MessageDelete] Auto-deleted winner announcement for auction #${auction.itemid}`);
-                  } catch (deleteError) {
-                    console.warn(`[MessageDelete] Failed to auto-delete winner announcement:`, deleteError.message);
-                  }
-                }, 10 * 60 * 1000); // 10 minutes
+                  try { await winnerMessage.delete(); } catch {}
+                }, 10 * 60 * 1000);
               }
             }
           } catch (fileError) {
             console.error('[AuctionExpired] Error creating win file for winner:', fileError);
           }
         } else {
-          // No bidders, return item to seller
-          await auction.update({ status: 'expired' });
+          // No bidders: keep/ensure expired and return to seller
+          if (auction.status !== 'expired') {
+            await auction.update({ status: 'expired' });
+          }
 
-          // Create auction win file to return item to seller
           try {
-            // Find seller information for the win file
             const seller = auction.seller || await ZMUser.findByPk(auction.sellerid);
             const sellerUsername = seller?.username1 || auction.sellername || 'Unknown';
+            if (!auction.sellerReturnWinFileCreated) {
+              await this.sftpLogReader.createAuctionWinFile(sellerUsername, auction.toJSON());
+              await auction.update({ sellerReturnWinFileCreated: true, winFileCreatedAt: new Date(), status: 'expired' });
+              console.log(`[AuctionExpired] Created win file to return item to seller ${sellerUsername} - Auction #${auction.itemid} (Expired with no bidders)`);
+            } else {
+              await this.sftpLogReader.createAuctionWinFile(`${sellerUsername}.retry`, auction.toJSON());
+              console.log(`[AuctionExpired] Duplicate detected, created retry return win file for seller ${sellerUsername} - Auction #${auction.itemid}`);
+            }
 
-            await this.sftpLogReader.createAuctionWinFile(sellerUsername, auction.toJSON());
-            console.log(`[AuctionExpired] Created win file to return item to seller ${sellerUsername} - Auction #${auction.itemid} (Expired with no bidders)`);
-
-            // Send notification about item return to seller
             const auctionChannelId = config.get('discord.auctionChannelId');
             if (auctionChannelId) {
               const channel = this.client.channels.cache.get(auctionChannelId);
@@ -2771,16 +2833,9 @@ export class DiscordBot {
                   `**Returned to Seller:** ${sellerUsername}\n` +
                   `**Reason:** No bidders\n` +
                   `**Auction ID:** #${auction.itemid}`);
-
-                // Auto-delete return announcement after 10 minutes
                 setTimeout(async () => {
-                  try {
-                    await returnMessage.delete();
-                    console.log(`[MessageDelete] Auto-deleted return announcement for auction #${auction.itemid}`);
-                  } catch (deleteError) {
-                    console.warn(`[MessageDelete] Failed to auto-delete return announcement:`, deleteError.message);
-                  }
-                }, 10 * 60 * 1000); // 10 minutes
+                  try { await returnMessage.delete(); } catch {}
+                }, 10 * 60 * 1000);
               }
             }
           } catch (fileError) {
@@ -2789,8 +2844,8 @@ export class DiscordBot {
         }
       }
 
-      if (expiredAuctions.length > 0) {
-        console.log(`[AuctionExpired] Processed ${expiredAuctions.length} expired auctions`);
+      if (toProcess.length > 0) {
+        console.log(`[AuctionExpired] Processed ${toProcess.length} expired auctions (age-based + status-expired)`);
       }
     } catch (error) {
       console.error('[AuctionExpired] Error processing expired auctions:', error);

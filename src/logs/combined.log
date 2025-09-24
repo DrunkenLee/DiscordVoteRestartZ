@@ -476,3 +476,205 @@
 {"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-18T03:01:09.699Z"}
 {"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-18T03:54:51.723Z"}
 {"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-18T03:55:40.576Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stopping auction log monitoring...","timestamp":"2025-09-18T07:20:21.854Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:44:34.005Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:44:38.337Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:44:38.338Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:44:38.339Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:44:43.913Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:44:50.195Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:44:50.195Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:44:50.195Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:45:33.750Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:45:36.605Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:45:36.605Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:45:36.606Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:46:28.635Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:46:31.788Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:46:31.789Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:46:31.789Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-22T08:51:33.354Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-22T08:49:50Z","timestamp":"2025-09-22T08:51:33.355Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #36: Shoes by Schweiper","timestamp":"2025-09-22T08:51:33.957Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1419607051180576849 for auction #36","timestamp":"2025-09-22T08:51:34.427Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: Shoes","timestamp":"2025-09-22T08:51:34.427Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-22T08:51:35.382Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:52:14.750Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:52:16.332Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:52:16.333Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:52:16.333Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:57:52.684Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:57:56.794Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:57:56.794Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:57:56.795Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:57:58.415Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:58:00.977Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:58:00.978Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:58:00.978Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:58:20.913Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:58:23.529Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:58:23.530Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:58:23.531Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T08:59:52.127Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T08:59:54.748Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T08:59:54.749Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T08:59:54.749Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T09:00:34.453Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T09:00:36.719Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T09:00:36.720Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T09:00:36.720Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T09:00:40.248Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T09:00:42.724Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T09:00:42.724Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T09:00:42.725Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T09:01:45.079Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T09:01:47.865Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T09:01:47.865Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T09:01:47.866Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T09:03:24.955Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T09:03:27.559Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T09:03:27.559Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T09:03:27.560Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T09:03:39.088Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T09:03:40.873Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T09:03:43.092Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T09:03:43.093Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T09:03:43.093Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stopping auction log monitoring...","timestamp":"2025-09-22T09:05:06.590Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:04:53.572Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:04:55.884Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:04:55.885Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:04:55.885Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:06:13.291Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:06:14.932Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:06:14.932Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:06:14.933Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-22T12:09:45.039Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:10:51.272Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:10:52.896Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:10:52.897Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:10:52.897Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:11:00.397Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:11:03.149Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:11:03.149Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:11:03.150Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:14:14.865Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:14:17.096Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:14:17.096Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:14:17.096Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:14:41.607Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:14:43.152Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:14:43.153Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:14:43.153Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:17:37.765Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:17:39.445Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:17:39.446Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:17:39.446Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:24:28.778Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:24:30.353Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:24:30.353Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:24:30.353Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-22T12:24:40.751Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-22T12:24:42.379Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-22T12:24:42.379Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-22T12:24:42.380Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stopping auction log monitoring...","timestamp":"2025-09-22T12:46:13.121Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-23T08:22:47.914Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-23T08:22:49.595Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-23T08:22:49.595Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-23T08:22:49.596Z"}
+{"level":"info","message":"[AuctionLogMonitor] Already running","timestamp":"2025-09-23T08:25:24.419Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-23T08:32:20.660Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-23T08:32:06Z","timestamp":"2025-09-23T08:32:20.661Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #40: Hand Scythe by Vefulz","timestamp":"2025-09-23T08:32:21.053Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1419964597997146192 for auction #40","timestamp":"2025-09-23T08:32:21.465Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: Hand Scythe","timestamp":"2025-09-23T08:32:21.466Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-23T08:32:22.367Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-23T08:33:50.763Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-23T08:33:26Z","timestamp":"2025-09-23T08:33:50.763Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #41: Crowbar by Vefulz","timestamp":"2025-09-23T08:33:51.093Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1419964975622918175 for auction #41","timestamp":"2025-09-23T08:33:51.498Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: Crowbar","timestamp":"2025-09-23T08:33:51.499Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-23T08:33:52.414Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-23T08:34:50.797Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-23T08:34:28Z","timestamp":"2025-09-23T08:34:50.797Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #42: Spiffo by Vefulz","timestamp":"2025-09-23T08:34:51.081Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1419965227281289327 for auction #42","timestamp":"2025-09-23T08:34:51.483Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: Spiffo","timestamp":"2025-09-23T08:34:51.483Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-23T08:34:52.393Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-23T08:58:22.324Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-23T08:58:21Z","timestamp":"2025-09-23T08:58:22.328Z"}
+{"level":"info","message":"[AuctionLogMonitor] Created new ZMUser: Schweiper","timestamp":"2025-09-23T08:58:23.183Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #43: School Bag by Schweiper","timestamp":"2025-09-23T08:58:23.225Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1419971151114797066 for auction #43","timestamp":"2025-09-23T08:58:24.277Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: School Bag","timestamp":"2025-09-23T08:58:24.278Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-23T08:58:26.249Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T01:11:20.144Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T01:11:21.828Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T01:11:21.828Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T01:11:21.829Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-24T01:11:53.491Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing SYSTEM_TEST at 2025-09-23T18:02:33Z","timestamp":"2025-09-24T01:11:53.491Z"}
+{"level":"info","message":"[AuctionLogMonitor] System test entry received: Auction logging system test","server":"pzserver","test":true,"timestamp":"2025-09-24T01:11:53.492Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-24T01:11:55.787Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T02:17:22.852Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T02:18:22.842Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T02:18:52.833Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-24T02:37:54.022Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-24T02:37:05Z","timestamp":"2025-09-24T02:37:54.024Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #44: M4A1 Assault Rifle (Enhanced) by admin","timestamp":"2025-09-24T02:37:54.442Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1420237789781426197 for auction #44","timestamp":"2025-09-24T02:37:54.997Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle (Enhanced)","timestamp":"2025-09-24T02:37:54.997Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-24T02:37:55.946Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T02:39:13.113Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T03:26:53.910Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T03:27:53.911Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T03:28:53.944Z"}
+{"level":"error","message":"[AuctionLogMonitor] Failed to scan auction logs:","timestamp":"2025-09-24T03:30:23.934Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-24T04:01:55.362Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-24T04:01:29Z","timestamp":"2025-09-24T04:01:55.365Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #45: M4A1 Assault Rifle by admin","timestamp":"2025-09-24T04:01:55.726Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1420258934752546887 for auction #45","timestamp":"2025-09-24T04:01:56.220Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle","timestamp":"2025-09-24T04:01:56.221Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-24T04:01:57.109Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-24T06:36:30.815Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing CREATE_AUCTION at 2025-09-24T06:35:50Z","timestamp":"2025-09-24T06:36:30.826Z"}
+{"level":"info","message":"[AuctionLogMonitor] ✅ Created auction #46: M4A1 Assault Rifle (Enhanced) by admin","timestamp":"2025-09-24T06:36:33.745Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stored Discord message ID 1420297850146914385 for auction #46","timestamp":"2025-09-24T06:36:34.310Z"}
+{"level":"info","message":"[AuctionLogMonitor] Sent auction notification for item: M4A1 Assault Rifle (Enhanced)","timestamp":"2025-09-24T06:36:34.310Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-24T06:36:36.579Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T06:43:24.445Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T06:43:26.337Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T06:43:26.338Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T06:43:26.338Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T06:44:37.755Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T06:44:40.672Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T06:44:40.672Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T06:44:40.673Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T06:56:29.925Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T06:56:35.153Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T06:56:38.213Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T06:56:38.214Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T06:56:38.214Z"}
+{"level":"info","message":"[AuctionLogMonitor] Found 1 new auction entries","timestamp":"2025-09-24T06:57:09.974Z"}
+{"level":"info","message":"[AuctionLogMonitor] Processing SYSTEM_TEST at 2025-09-24T06:56:17Z","timestamp":"2025-09-24T06:57:09.975Z"}
+{"level":"info","message":"[AuctionLogMonitor] System test entry received: Auction logging system test","server":"pzserver","test":true,"timestamp":"2025-09-24T06:57:09.975Z"}
+{"level":"info","message":"[AuctionLogMonitor] Successfully processed all entries; auction log truncated.","timestamp":"2025-09-24T06:57:12.320Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T07:01:29.474Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T07:01:32.411Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T07:01:32.412Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T07:01:32.412Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T07:03:52.380Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T07:03:54.449Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T07:03:54.449Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T07:03:54.449Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T07:06:09.146Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T07:06:10.985Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T07:06:10.985Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T07:06:10.985Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stopping auction log monitoring...","timestamp":"2025-09-24T07:13:57.908Z"}
+{"level":"info","message":"External knowledge base loaded successfully","timestamp":"2025-09-24T07:14:03.077Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting auction log monitoring...","timestamp":"2025-09-24T07:14:08.810Z"}
+{"level":"info","message":"[AuctionLogMonitor] Starting from position: 0","timestamp":"2025-09-24T07:14:08.810Z"}
+{"level":"info","message":"[AuctionLogMonitor] Monitoring started with 30s interval","timestamp":"2025-09-24T07:14:08.810Z"}
+{"level":"info","message":"[AuctionLogMonitor] Stopping auction log monitoring...","timestamp":"2025-09-24T07:17:16.903Z"}

@@ -1,0 +1,219 @@
+AUCTION WIN RECORD
+Generated: 2025-09-16T03:15:01.133Z
+================================
+
+BASIC AUCTION INFORMATION:
+Auction ID: 23
+Item Name: Enchanted Baseball Bat of Power
+Item Description: A legendary baseball bat blessed by ancient powers, enhanced with magical enchantments
+Item Type: Base.BaseballBat
+Item Condition: 0.87
+Starting Price: 500.00 points
+Final Bid: 750.00 points
+Buyout Price: 1000.00 points
+Status: completed
+
+SELLER INFORMATION:
+- Seller ID: 1
+- Seller Name: LegendaryWarrior
+
+WINNER INFORMATION:
+- Buyer ID: 2
+- Buyer Name: EpicCollector
+- Buyer Username: EpicCollector
+
+AUCTION TIMESTAMPS:
+- Created: Tue Sep 16 2025 10:15:00 GMT+0700 (Western Indonesia Time)
+- Last Updated: Tue Sep 16 2025 10:15:00 GMT+0700 (Western Indonesia Time)
+
+================================
+COMPLETE ITEM DATA SECTION:
+================================
+
+MOD DATA:
+{
+  "enchantments": {
+    "sharpness": 3,
+    "durability": 2,
+    "knockback": 1
+  },
+  "customProperties": {
+    "isBlessed": true,
+    "ownerName": "Legendary Warrior",
+    "craftedBy": "Master Smith",
+    "specialEffects": [
+      "fire_damage",
+      "vampiric_drain"
+    ]
+  },
+  "stats": {
+    "attackSpeed": 1.2,
+    "criticalChance": 0.15,
+    "blockChance": 0.25
+  }
+}
+
+ITEM DATA:
+{
+  "itemType": "Base.BaseballBat",
+  "condition": 0.87,
+  "weight": 2.5,
+  "categories": [
+    "Weapon",
+    "Blunt",
+    "TwoHanded"
+  ],
+  "properties": {
+    "MinDamage": 0.8,
+    "MaxDamage": 1.1,
+    "MinAngle": 0.65,
+    "MaxAngle": 0.95,
+    "MinRange": 1.61,
+    "MaxRange": 1.61,
+    "WeaponSprite": "BaseballBat",
+    "SoundHit": "BaseballBatHit",
+    "DoorDamage": 5,
+    "TreeDamage": 4,
+    "CriticalChance": 30,
+    "CritDmgMultiplier": 2,
+    "MinimumSwingTime": 2.5,
+    "SwingAmountBeforeImpact": 0.02,
+    "PushBackMod": 0.3,
+    "KnockdownMod": 0.3,
+    "KnockBackOnNoDeath": true,
+    "BreakSound": "BreakWoodItem"
+  },
+  "tags": [
+    "weapon",
+    "blunt",
+    "twohanded",
+    "long"
+  ],
+  "metadata": {
+    "spawnedTime": "2025-09-16T10:30:00Z",
+    "lastUsedTime": "2025-09-16T12:45:00Z",
+    "repairCount": 2,
+    "originalCondition": 1
+  }
+}
+
+ORIGINAL LOG BRIDGE DATA:
+{
+  "action": "CREATE_AUCTION",
+  "timestamp": "2025-09-16T14:20:00Z",
+  "unixTime": 1726502400,
+  "data": {
+    "sellerUsername": "LegendaryWarrior",
+    "sellerSteamID": "76561198123456789",
+    "itemName": "Enchanted Baseball Bat of Power",
+    "itemType": "Base.BaseballBat",
+    "condition": 0.87,
+    "startingPrice": 500,
+    "buyoutPrice": 1000,
+    "currentBid": 500,
+    "duration": 24,
+    "isActive": true,
+    "serverName": "ZonaMerah Server",
+    "itemProperties": {
+      "MinDamage": 0.8,
+      "MaxDamage": 1.1,
+      "MinAngle": 0.65,
+      "MaxAngle": 0.95,
+      "MinRange": 1.61,
+      "MaxRange": 1.61,
+      "WeaponSprite": "BaseballBat",
+      "SoundHit": "BaseballBatHit",
+      "DoorDamage": 5,
+      "TreeDamage": 4,
+      "CriticalChance": 30,
+      "CritDmgMultiplier": 2,
+      "MinimumSwingTime": 2.5,
+      "SwingAmountBeforeImpact": 0.02,
+      "PushBackMod": 0.3,
+      "KnockdownMod": 0.3,
+      "KnockBackOnNoDeath": true,
+      "BreakSound": "BreakWoodItem"
+    },
+    "modData": {
+      "enchantments": {
+        "sharpness": 3,
+        "durability": 2,
+        "knockback": 1
+      },
+      "customProperties": {
+        "isBlessed": true,
+        "ownerName": "Legendary Warrior",
+        "craftedBy": "Master Smith",
+        "specialEffects": [
+          "fire_damage",
+          "vampiric_drain"
+        ]
+      },
+      "stats": {
+        "attackSpeed": 1.2,
+        "criticalChance": 0.15,
+        "blockChance": 0.25
+      }
+    },
+    "fullItemData": {
+      "itemType": "Base.BaseballBat",
+      "condition": 0.87,
+      "weight": 2.5,
+      "categories": [
+        "Weapon",
+        "Blunt",
+        "TwoHanded"
+      ],
+      "properties": {
+        "MinDamage": 0.8,
+        "MaxDamage": 1.1,
+        "MinAngle": 0.65,
+        "MaxAngle": 0.95,
+        "MinRange": 1.61,
+        "MaxRange": 1.61,
+        "WeaponSprite": "BaseballBat",
+        "SoundHit": "BaseballBatHit",
+        "DoorDamage": 5,
+        "TreeDamage": 4,
+        "CriticalChance": 30,
+        "CritDmgMultiplier": 2,
+        "MinimumSwingTime": 2.5,
+        "SwingAmountBeforeImpact": 0.02,
+        "PushBackMod": 0.3,
+        "KnockdownMod": 0.3,
+        "KnockBackOnNoDeath": true,
+        "BreakSound": "BreakWoodItem"
+      },
+      "tags": [
+        "weapon",
+        "blunt",
+        "twohanded",
+        "long"
+      ],
+      "metadata": {
+        "spawnedTime": "2025-09-16T10:30:00Z",
+        "lastUsedTime": "2025-09-16T12:45:00Z",
+        "repairCount": 2,
+        "originalCondition": 1
+      }
+    }
+  }
+}
+
+================================
+GAME INTEGRATION INSTRUCTIONS:
+================================
+
+This file contains complete item data for restoration.
+The game should use the ITEM DATA and MOD DATA sections
+to recreate the exact item with all properties, enchantments,
+conditions, and modifications intact.
+
+Item Restoration Priority:
+1. Use ITEM DATA for complete item reconstruction
+2. Apply MOD DATA for custom properties and enchantments  
+3. Set item condition to: 0.87
+4. Verify item type matches: Base.BaseballBat
+
+================================
+End of Auction Win Record

@@ -71,6 +71,22 @@ export const PlayerAuction = sequelize.define('PlayerAuction', {
     type: DataTypes.TEXT,
     allowNull: true,
     comment: 'Discord message ID for the auction notification message'
+  },
+  winnerWinFileCreated: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Winner win file created flag'
+  },
+  sellerReturnWinFileCreated: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Seller return win file created flag'
+  },
+  winFileCreatedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   tableName: 'player_auctions',

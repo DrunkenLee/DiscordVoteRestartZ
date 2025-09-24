@@ -1,0 +1,268 @@
+AUCTION WIN RECORD
+Generated: 2025-09-16T03:16:56.356Z
+================================
+
+BASIC AUCTION INFORMATION:
+Auction ID: 25
+Item Name: Mystic Katana of Fire
+Item Description: Type: Base.Katana | Condition: 93.0% | Buyout: 1500 | Duration: 24h | Server: ZonaMerah Server
+Item Type: Base.Katana
+Item Condition: 0.93
+Starting Price: 750.00 points
+Final Bid: 1500.00 points
+Buyout Price: 1500.00 points
+Status: completed
+
+SELLER INFORMATION:
+- Seller ID: 340
+- Seller Name: EnchantedCrafter
+
+WINNER INFORMATION:
+- Buyer ID: 341
+- Buyer Name: EpicCollector
+- Buyer Username: EpicCollector
+
+AUCTION TIMESTAMPS:
+- Created: Tue Sep 16 2025 10:16:56 GMT+0700 (Western Indonesia Time)
+- Last Updated: Tue Sep 16 2025 10:16:56 GMT+0700 (Western Indonesia Time)
+
+================================
+COMPLETE ITEM DATA SECTION:
+================================
+
+MOD DATA:
+{
+  "enchantments": {
+    "fire_damage": 5,
+    "sharpness": 4,
+    "unbreaking": 3,
+    "vampiric_drain": 2
+  },
+  "customProperties": {
+    "isLegendary": true,
+    "ownerName": "EnchantedCrafter",
+    "craftedBy": "Master Blacksmith",
+    "forgedWith": "Dragon Scale",
+    "blessing": "Phoenix Fire",
+    "specialEffects": [
+      "flame_trail",
+      "fire_burst_on_crit",
+      "burn_immunity"
+    ]
+  },
+  "stats": {
+    "attackSpeed": 1.4,
+    "criticalChance": 0.25,
+    "blockChance": 0.3,
+    "durabilityBonus": 0.5
+  },
+  "enchantMinDamage": 2.8,
+  "enchantMaxDamage": 4.2,
+  "origMinDamage": 1.3,
+  "origMaxDamage": 2.1,
+  "IPPJRecoilDelay": 1.2,
+  "hasDamageBoost": true
+}
+
+ITEM DATA:
+{
+  "itemType": "Base.Katana",
+  "condition": 0.93,
+  "weight": 2.8,
+  "categories": [
+    "Weapon",
+    "Blade",
+    "Long",
+    "TwoHanded"
+  ],
+  "properties": {
+    "MinDamage": 1.3,
+    "MaxDamage": 2.1,
+    "MinAngle": 0.2,
+    "MaxAngle": 0.95,
+    "MinRange": 1.61,
+    "MaxRange": 1.61,
+    "WeaponSprite": "Katana",
+    "SoundHit": "KatanaHit",
+    "DoorDamage": 8,
+    "TreeDamage": 6,
+    "CriticalChance": 40,
+    "CritDmgMultiplier": 3.5,
+    "MinimumSwingTime": 1.8,
+    "SwingAmountBeforeImpact": 0.01,
+    "PushBackMod": 0.4,
+    "KnockdownMod": 0.2,
+    "KnockBackOnNoDeath": true,
+    "BreakSound": "BreakMetalItem"
+  },
+  "tags": [
+    "weapon",
+    "blade",
+    "katana",
+    "legendary",
+    "enchanted"
+  ],
+  "metadata": {
+    "spawnedTime": "2025-09-16T14:20:00Z",
+    "lastUsedTime": "2025-09-16T16:30:00Z",
+    "repairCount": 1,
+    "originalCondition": 1,
+    "enchantedBy": "EnchantedCrafter",
+    "enchantmentDate": "2025-09-16T15:15:00Z",
+    "lastOwners": [
+      "Newbie123",
+      "WarriorKing",
+      "EnchantedCrafter"
+    ]
+  },
+  "itemID": "KATANA_MYSTIC_001",
+  "uniqueIdentifier": "mystic_katana_phoenix_${Date.now()}"
+}
+
+ORIGINAL LOG BRIDGE DATA:
+{
+  "action": "CREATE_AUCTION",
+  "timestamp": "2025-09-16T16:45:00Z",
+  "unixTime": 1726511100,
+  "data": {
+    "sellerUsername": "EnchantedCrafter",
+    "sellerSteamID": "76561198987654321",
+    "itemName": "Mystic Katana of Fire",
+    "itemType": "Base.Katana",
+    "condition": 0.93,
+    "weight": 2.8,
+    "category": "Weapon",
+    "customName": "Blade of the Phoenix",
+    "description": "A legendary katana forged in dragon fire with mystical enchantments",
+    "startingPrice": 750,
+    "buyoutPrice": 1500,
+    "currentBid": 750,
+    "duration": 24,
+    "isActive": true,
+    "serverName": "ZonaMerah Server",
+    "modData": {
+      "enchantments": {
+        "fire_damage": 5,
+        "sharpness": 4,
+        "unbreaking": 3,
+        "vampiric_drain": 2
+      },
+      "customProperties": {
+        "isLegendary": true,
+        "ownerName": "EnchantedCrafter",
+        "craftedBy": "Master Blacksmith",
+        "forgedWith": "Dragon Scale",
+        "blessing": "Phoenix Fire",
+        "specialEffects": [
+          "flame_trail",
+          "fire_burst_on_crit",
+          "burn_immunity"
+        ]
+      },
+      "stats": {
+        "attackSpeed": 1.4,
+        "criticalChance": 0.25,
+        "blockChance": 0.3,
+        "durabilityBonus": 0.5
+      },
+      "enchantMinDamage": 2.8,
+      "enchantMaxDamage": 4.2,
+      "origMinDamage": 1.3,
+      "origMaxDamage": 2.1,
+      "IPPJRecoilDelay": 1.2,
+      "hasDamageBoost": true
+    },
+    "itemProperties": {
+      "MinDamage": 1.3,
+      "MaxDamage": 2.1,
+      "MinAngle": 0.2,
+      "MaxAngle": 0.95,
+      "MinRange": 1.61,
+      "MaxRange": 1.61,
+      "WeaponSprite": "Katana",
+      "SoundHit": "KatanaHit",
+      "DoorDamage": 8,
+      "TreeDamage": 6,
+      "CriticalChance": 40,
+      "CritDmgMultiplier": 3.5,
+      "MinimumSwingTime": 1.8,
+      "SwingAmountBeforeImpact": 0.01,
+      "PushBackMod": 0.4,
+      "KnockdownMod": 0.2,
+      "KnockBackOnNoDeath": true,
+      "BreakSound": "BreakMetalItem",
+      "Categories": "Weapon;Blade;Long"
+    },
+    "fullItemData": {
+      "itemType": "Base.Katana",
+      "condition": 0.93,
+      "weight": 2.8,
+      "categories": [
+        "Weapon",
+        "Blade",
+        "Long",
+        "TwoHanded"
+      ],
+      "properties": {
+        "MinDamage": 1.3,
+        "MaxDamage": 2.1,
+        "MinAngle": 0.2,
+        "MaxAngle": 0.95,
+        "MinRange": 1.61,
+        "MaxRange": 1.61,
+        "WeaponSprite": "Katana",
+        "SoundHit": "KatanaHit",
+        "DoorDamage": 8,
+        "TreeDamage": 6,
+        "CriticalChance": 40,
+        "CritDmgMultiplier": 3.5,
+        "MinimumSwingTime": 1.8,
+        "SwingAmountBeforeImpact": 0.01,
+        "PushBackMod": 0.4,
+        "KnockdownMod": 0.2,
+        "KnockBackOnNoDeath": true,
+        "BreakSound": "BreakMetalItem"
+      },
+      "tags": [
+        "weapon",
+        "blade",
+        "katana",
+        "legendary",
+        "enchanted"
+      ],
+      "metadata": {
+        "spawnedTime": "2025-09-16T14:20:00Z",
+        "lastUsedTime": "2025-09-16T16:30:00Z",
+        "repairCount": 1,
+        "originalCondition": 1,
+        "enchantedBy": "EnchantedCrafter",
+        "enchantmentDate": "2025-09-16T15:15:00Z",
+        "lastOwners": [
+          "Newbie123",
+          "WarriorKing",
+          "EnchantedCrafter"
+        ]
+      },
+      "itemID": "KATANA_MYSTIC_001",
+      "uniqueIdentifier": "mystic_katana_phoenix_${Date.now()}"
+    }
+  }
+}
+
+================================
+GAME INTEGRATION INSTRUCTIONS:
+================================
+
+This file contains complete item data for restoration.
+The game should use the ITEM DATA and MOD DATA sections
+to recreate the exact item with all properties, enchantments,
+conditions, and modifications intact.
+
+Item Restoration Priority:
+1. Use ITEM DATA for complete item reconstruction
+2. Apply MOD DATA for custom properties and enchantments  
+3. Set item condition to: 0.93
+4. Verify item type matches: Base.Katana
+
+================================
+End of Auction Win Record
