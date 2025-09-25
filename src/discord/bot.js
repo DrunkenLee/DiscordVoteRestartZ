@@ -361,8 +361,8 @@ export class DiscordBot {
           this.restartCooldown = 4 * 60 * 60 * 1000;
           this.requiredConfirmations = 5;
 
-          // Check cooldown period
-          if (this.lastRestartTime) {
+          // Check cooldown period (admins and developers are immune)
+          if (this.lastRestartTime && !isAdmin && !isDeveloper) {
             const timeSinceLastRestart = Date.now() - this.lastRestartTime;
             if (timeSinceLastRestart < this.restartCooldown) {
               const remainingTime = this.restartCooldown - timeSinceLastRestart;
@@ -371,9 +371,9 @@ export class DiscordBot {
             }
           }
 
-          // If admin, skip confirmation and restart immediately
-          if (isAdmin) {
-            await message.channel.send(`Server restart initiated by ${message.author.username} (Admin)...`);
+          // If admin or developer, skip confirmation and restart immediately
+          if (isAdmin || isDeveloper) {
+            await message.channel.send(`Server restart initiated by ${message.author.username} (${isDeveloper ? 'Developer' : 'Admin'})...`);
             try {
               // First warning via RCON
               await wrappedRconClient.send('servermsg "SERVER RESTART: Restart initiated by Admin. Server will restart in 3 minutes."');
@@ -636,6 +636,44 @@ export class DiscordBot {
         } catch (err) {
           message.channel.send(`Error fetching RavenCreek killboard: ${err.message}`);
           console.error('Error in !rckillboard:', err);
+        }
+      } else if (command === 'wdauction') {
+        try {
+          // Get the user's Discord ID
+          const discordId = message.author.username;
+
+          // Query zmuser table to get the username1
+          const user = await ZMUser.findOne({
+            where: { discordid: discordId }
+          });
+
+          if (!user || !user.username1) {
+            return message.channel.send('❌ You are not registered in the system or no username found. Please contact an admin.');
+          }
+
+          const username = user.username1;
+
+          // Check if player is currently online by getting players list
+          const playersResponse = await wrappedRconClient.send('players');
+          const onlinePlayers = playersResponse ? playersResponse.split('\n').filter(line => line.trim()) : [];
+
+          // Check if the username is in the online players list
+          const isOnline = onlinePlayers.some(player => player.toLowerCase().includes(username.toLowerCase()));
+
+          if (!isOnline) {
+            return message.channel.send(`❌ Player "${username}" is not currently online. You must be in-game to withdraw auction points.`);
+          }
+
+          // Execute the lua command to withdraw auction points
+          const luaCommand = `luacmd clientexe ${username} withdrawauctionpoints`;
+          const response = await wrappedRconClient.send(luaCommand);
+
+          message.channel.send(`✅ Auction points withdrawal command sent for "${username}". ${response || ''}`);
+          console.log(`[WDAuction] Command executed for ${username} (Discord: ${discordId}): ${luaCommand}`);
+
+        } catch (err) {
+          message.channel.send(`❌ Error processing auction withdrawal: ${err.message}`);
+          console.error('Error in !wdauction:', err);
         }
       } else if (command === 'adduser') {
         // Check if user has admin role
