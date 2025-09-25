@@ -64,7 +64,7 @@ export class AuctionLogMonitor {
    */
   async scanAndProcessAuctions() {
     try {
-      // Always scan from position 0
+      // Scan all auction_data*.jsonl files (startPosition ignored in multi-file mode)
       const result = await this.sftpLogReader.scanForAuctionLogs(0);
 
       if (!result.success) {
@@ -81,20 +81,21 @@ export class AuctionLogMonitor {
           if (!ok) allSucceeded = false;
         }
 
-        if (allSucceeded) {
+        // In multi-file mode, delete processed files only if all entries succeeded
+        const filesToDelete = result.filesProcessed || [];
+        if (allSucceeded && filesToDelete.length > 0) {
           try {
-            await this.sftpLogReader.truncateAuctionLogFile();
+            await this.sftpLogReader.deleteAuctionLogFiles(filesToDelete);
             this.currentPosition = 0;
-            logger.info('[AuctionLogMonitor] Successfully processed all entries; auction log truncated.');
-          } catch (truncateError) {
-            logger.error('[AuctionLogMonitor] Failed to truncate auction log after processing:', truncateError);
-            // Keep position at 0 to retry on next cycle
+            logger.info(`[AuctionLogMonitor] Successfully processed all entries; deleted ${filesToDelete.length} auction_data*.jsonl file(s).`);
+          } catch (deleteError) {
+            logger.error('[AuctionLogMonitor] Failed to delete processed auction log files:', deleteError);
             this.currentPosition = 0;
           }
-        } else {
-          // Some entries failed; keep position at 0 to retry next cycle
+        } else if (!allSucceeded) {
+          // Some entries failed; keep files so we can retry next cycle
           this.currentPosition = 0;
-          logger.warn('[AuctionLogMonitor] Some entries failed; auction log preserved for retry.');
+          logger.warn('[AuctionLogMonitor] Some entries failed; auction log files preserved for retry.');
         }
       } else {
         // No entries; keep position at 0

@@ -1875,7 +1875,7 @@ export class DiscordBot {
 
     // Auction expiry checker - runs every 5 minutes
     cron.schedule(
-      '*/1 * * * *',
+      '*/15 * * * *',
       async () => {
         const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
         try {
@@ -1996,20 +1996,18 @@ export class DiscordBot {
             // If bid reaches buyout price, create win file immediately and delete auction message
             if (reachesBuyout) {
               // Delete the auction message since auction is completed
-              await this.deleteAuctionMessage(auction, 'auto bid buyout');
+              await this.deleteAuctionMessage(auction, 'manual bid buyout');
 
               try {
-                if (!auction.winnerWinFileCreated) {
+                const canCreate = await this.markWinFileIfNeeded(auction.itemid, 'winner');
+                if (canCreate) {
                   await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
-                  await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
-                  console.log(`[AuctionAutoBuyout] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Bid reached buyout)`);
+                  console.log(`[AuctionManualBid] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Manual bid reached buyout)`);
                 } else {
-                  // Alternate file creation: append a .retry marker file
-                  await this.sftpLogReader.createAuctionWinFile(`${bidder.username1}.retry`, auction.toJSON());
-                  console.log(`[AuctionAutoBuyout] Duplicate detected, created retry win file for ${bidder.username1} - Auction #${auction.itemid}`);
+                  console.log(`[AuctionManualBid] Win file already created, skipping duplicate for Auction #${auction.itemid}`);
                 }
               } catch (fileError) {
-                console.error('[AuctionAutoBuyout] Error creating win file:', fileError);
+                console.error('[AuctionManualBid] Error creating win file:', fileError);
               }
             }
 
@@ -2087,6 +2085,11 @@ export class DiscordBot {
             });
           }
 
+          // Check if bidder is trying to bid on their own auction
+          if (auction.sellerid === bidder.id) {
+            return interaction.editReply({ content: 'You cannot bid on your own auction.' });
+          }
+
           const startingPrice = parseFloat(auction.itemprice) || 0;
           const lastBid = parseFloat(auction.lastbid || auction.itemprice) || 0;
           const buyoutPrice = auction.buyoutprice ? parseFloat(auction.buyoutprice) : null;
@@ -2137,14 +2140,12 @@ export class DiscordBot {
             await this.deleteAuctionMessage(auction, 'auto bid buyout');
 
             try {
-              if (!auction.winnerWinFileCreated) {
+              const canCreate = await this.markWinFileIfNeeded(auction.itemid, 'winner');
+              if (canCreate) {
                 await this.sftpLogReader.createAuctionWinFile(bidder.username1, auction.toJSON());
-                await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
                 console.log(`[AuctionAutoBuyout] Created win file for ${bidder.username1} - Auction #${auction.itemid} (Bid reached buyout)`);
               } else {
-                // Alternate file creation: append a .retry marker file
-                await this.sftpLogReader.createAuctionWinFile(`${bidder.username1}.retry`, auction.toJSON());
-                console.log(`[AuctionAutoBuyout] Duplicate detected, created retry win file for ${bidder.username1} - Auction #${auction.itemid}`);
+                console.log(`[AuctionAutoBuyout] Win file already created, skipping duplicate for Auction #${auction.itemid}`);
               }
             } catch (fileError) {
               console.error('[AuctionAutoBuyout] Error creating win file:', fileError);
@@ -2234,13 +2235,12 @@ export class DiscordBot {
 
           // Create auction win file for instant buyout
           try {
-            if (!auction.winnerWinFileCreated) {
+            const canCreate = await this.markWinFileIfNeeded(auction.itemid, 'winner');
+            if (canCreate) {
               await this.sftpLogReader.createAuctionWinFile(buyer.username1, auction.toJSON());
-              await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
               console.log(`[AuctionBuyout] Created win file for ${buyer.username1} - Auction #${auction.itemid} (Buyout)`);
             } else {
-              await this.sftpLogReader.createAuctionWinFile(`${buyer.username1}.retry`, auction.toJSON());
-              console.log(`[AuctionBuyout] Duplicate detected, created retry win file for ${buyer.username1} - Auction #${auction.itemid}`);
+              console.log(`[AuctionBuyout] Win file already created, skipping duplicate for Auction #${auction.itemid}`);
             }
           } catch (fileError) {
             console.error('[AuctionBuyout] Error creating win file:', fileError);
@@ -2561,6 +2561,19 @@ export class DiscordBot {
   }
 
   /**
+   * Atomically mark win-file flag to avoid duplicates
+   * Returns true if this call set the flag (caller should create file), false if already set
+   */
+  async markWinFileIfNeeded(auctionItemId, type) {
+    const field = type === 'winner' ? 'winnerWinFileCreated' : 'sellerReturnWinFileCreated';
+    const [affected] = await PlayerAuction.update(
+      { [field]: true, winFileCreatedAt: new Date() },
+      { where: { itemid: auctionItemId, [field]: false } }
+    );
+    return affected > 0;
+  }
+
+  /**
    * Display auction list with bid buttons
    * @param {Message} message - Discord message object
    */
@@ -2780,13 +2793,13 @@ export class DiscordBot {
           }
           // Create win file for winner
           try {
-            if (!auction.winnerWinFileCreated) {
+            const canCreate = await this.markWinFileIfNeeded(auction.itemid, 'winner');
+            if (canCreate) {
               await this.sftpLogReader.createAuctionWinFile(auction.buyerUsername, auction.toJSON());
               await auction.update({ winnerWinFileCreated: true, winFileCreatedAt: new Date() });
               console.log(`[AuctionExpired] Created win file for ${auction.buyerUsername} - Auction #${auction.itemid} (Expired with winner)`);
             } else {
-              await this.sftpLogReader.createAuctionWinFile(`${auction.buyerUsername}.retry`, auction.toJSON());
-              console.log(`[AuctionExpired] Duplicate detected, created retry win file for ${auction.buyerUsername} - Auction #${auction.itemid}`);
+              console.log(`[AuctionExpired] Winner win file already created, skipping duplicate for Auction #${auction.itemid}`);
             }
 
             const auctionChannelId = config.get('discord.auctionChannelId');
@@ -2815,13 +2828,12 @@ export class DiscordBot {
           try {
             const seller = auction.seller || await ZMUser.findByPk(auction.sellerid);
             const sellerUsername = seller?.username1 || auction.sellername || 'Unknown';
-            if (!auction.sellerReturnWinFileCreated) {
+            const canCreate = await this.markWinFileIfNeeded(auction.itemid, 'seller');
+            if (canCreate) {
               await this.sftpLogReader.createAuctionWinFile(sellerUsername, auction.toJSON());
-              await auction.update({ sellerReturnWinFileCreated: true, winFileCreatedAt: new Date(), status: 'expired' });
               console.log(`[AuctionExpired] Created win file to return item to seller ${sellerUsername} - Auction #${auction.itemid} (Expired with no bidders)`);
             } else {
-              await this.sftpLogReader.createAuctionWinFile(`${sellerUsername}.retry`, auction.toJSON());
-              console.log(`[AuctionExpired] Duplicate detected, created retry return win file for seller ${sellerUsername} - Auction #${auction.itemid}`);
+              console.log(`[AuctionExpired] Seller-return file already created, skipping duplicate for Auction #${auction.itemid}`);
             }
 
             const auctionChannelId = config.get('discord.auctionChannelId');
