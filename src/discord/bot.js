@@ -1719,63 +1719,66 @@ export class DiscordBot {
           message.channel.send(`❌ Unknown developer command: ${devCommand}. Use \`!devhelp\` to see available commands.`);
         }
       } else if (command === 'isolationstatus') {
+        message.channel.send('❌ The isolation status command is currently disabled.');
         // Check if user has admin or developer role
-        if (!isDeveloper && !isAdmin) {
-          return message.channel.send('❌ You need the @developer or @admin role to check isolation zone status.');
-        }
+        // if (!isDeveloper && !isAdmin) {
+        //   return message.channel.send('❌ You need the @developer or @admin role to check isolation zone status.');
+        // }
 
-        const status = this.luaCommandManager.getStatus();
+        // const status = this.luaCommandManager.getStatus();
 
-        let statusMessage = `**🌙 Isolation Zone Horde Status**\n`;
-        statusMessage += `**Current Time (WIB):** ${status.currentTime}\n`;
-        statusMessage += `**Current Hour:** ${status.currentHour}:xx\n`;
-        statusMessage += `**Active Time Range:** ${status.isInActiveTimeRange ? '✅ YES (7 PM - 12 AM)' : '❌ NO (Outside 7 PM - 12 AM)'}\n`;
-        statusMessage += `**System Active:** ${status.isActive ? '🟢 ACTIVE' : '🔴 INACTIVE'}\n`;
-        statusMessage += `**Next Check:** ${status.nextExecution}\n`;
-        statusMessage += `**Schedule:** ${status.schedule}`;
+        // let statusMessage = `**🌙 Isolation Zone Horde Status**\n`;
+        // statusMessage += `**Current Time (WIB):** ${status.currentTime}\n`;
+        // statusMessage += `**Current Hour:** ${status.currentHour}:xx\n`;
+        // statusMessage += `**Active Time Range:** ${status.isInActiveTimeRange ? '✅ YES (7 PM - 12 AM)' : '❌ NO (Outside 7 PM - 12 AM)'}\n`;
+        // statusMessage += `**System Active:** ${status.isActive ? '🟢 ACTIVE' : '🔴 INACTIVE'}\n`;
+        // statusMessage += `**Next Check:** ${status.nextExecution}\n`;
+        // statusMessage += `**Schedule:** ${status.schedule}`;
 
-        message.channel.send(statusMessage);
+        // message.channel.send(statusMessage);
       } else if (command === 'testisolation') {
+        message.channel.send('❌ The isolation test command is currently disabled.');
         // Check if user has admin or developer role
-        if (!isDeveloper && !isAdmin) {
-          return message.channel.send('❌ You need the @developer or @admin role to test isolation zone commands.');
-        }
+        // if (!isDeveloper && !isAdmin) {
+        //   return message.channel.send('❌ You need the @developer or @admin role to test isolation zone commands.');
+        // }
 
-        try {
-          await message.channel.send('🧪 **Testing Isolation Zone Horde Check...**');
+        // try {
+        //   await message.channel.send('🧪 **Testing Isolation Zone Horde Check...**');
 
-          await this.luaCommandManager.manualTriggerIsolationZone();
+        //   await this.luaCommandManager.manualTriggerIsolationZone();
 
-          await message.channel.send('✅ **Isolation Zone Horde Check Test Completed Successfully!**');
-        } catch (error) {
-          await message.channel.send(`❌ **Isolation Zone Test Failed:** ${error.message}`);
-        }
+        //   await message.channel.send('✅ **Isolation Zone Horde Check Test Completed Successfully!**');
+        // } catch (error) {
+        //   await message.channel.send(`❌ **Isolation Zone Test Failed:** ${error.message}`);
+        // }
       } else if (command === 'debugisolation') {
+        message.channel.send('❌ The isolation debug command is currently disabled.');
         // Check if user has admin or developer role
-        if (!isDeveloper && !isAdmin) {
-          return message.channel.send('❌ You need the @developer or @admin role to debug isolation zone.');
-        }
+        // if (!isDeveloper && !isAdmin) {
+        //   return message.channel.send('❌ You need the @developer or @admin role to debug isolation zone.');
+        // }
 
-        try {
-          await message.channel.send('🔍 **Debugging Isolation Zone System...**');
+        // try {
+        //   await message.channel.send('🔍 **Debugging Isolation Zone System...**');
 
-          // Force run the check immediately
-          await this.luaCommandManager.checkAndExecuteIsolationZone();
+        //   // Force run the check immediately
+        //   await this.luaCommandManager.checkAndExecuteIsolationZone();
 
-          const status = this.luaCommandManager.getStatus();
+        //   const status = this.luaCommandManager.getStatus();
 
-          let debugMessage = `**🔍 Debug Results:**\n`;
-          debugMessage += `**Current Time:** ${status.currentTime}\n`;
-          debugMessage += `**Current Hour:** ${status.currentHour}\n`;
-          debugMessage += `**In Time Range:** ${status.isInActiveTimeRange}\n`;
-          debugMessage += `**System Active:** ${status.isActive}\n`;
-          debugMessage += `**RCON Available:** ${this.luaCommandManager.wrappedRconClient ? 'Yes' : 'No'}\n`;
-          debugMessage += `**Discord Client:** ${this.luaCommandManager.discordClient ? 'Yes' : 'No'}`;
+        //   let debugMessage = `**🔍 Debug Results:**\n`;
+        //   debugMessage += `**Current Time:** ${status.currentTime}\n`;
+        //   debugMessage += `**Current Hour:** ${status.currentHour}\n`;
+        //   debugMessage += `**In Time Range:** ${status.isInActiveTimeRange}\n`;
+        //   debugMessage += `**System Active:** ${status.isActive}\n`;
+        //   debugMessage += `**RCON Available:** ${this.luaCommandManager.wrappedRconClient ? 'Yes' : 'No'}\n`;
+        //   debugMessage += `**Discord Client:** ${this.luaCommandManager.discordClient ? 'Yes' : 'No'}`;
 
-          await message.channel.send(debugMessage);
-        } catch (error) {
-          await message.channel.send(`❌ **Debug Failed:** ${error.message}`);
-        }
+        //   await message.channel.send(debugMessage);
+        // } catch (error) {
+        //   await message.channel.send(`❌ **Debug Failed:** ${error.message}`);
+        // }
       }
     });
   }
@@ -1929,11 +1932,6 @@ export class DiscordBot {
     );
 
     console.log('📅 Cron jobs scheduled:');
-    console.log(
-      `   - Daily supply run reset at 12:01 PM WIB (via SFTP) - Current server time: ${new Date().toLocaleString('en-US', {
-        timeZone: 'Asia/Jakarta',
-      })}`
-    );
     console.log('   - Daily global flags reset at 12:02 PM WIB (via SFTP)');
     console.log('   - Daily evening world boss reset at 07:00 PM WIB (via SFTP)');
     console.log('   - Auction expiry checker every 5 minutes');

@@ -11,24 +11,8 @@ export class BotLuaCommandManager {
   initialize(wrappedRconClient, discordClient = null) {
     this.wrappedRconClient = wrappedRconClient;
     this.discordClient = discordClient;
-    this.setupIsolationZoneScheduler();
+    // this.setupIsolationZoneScheduler();
     console.log('🎯 Bot Lua Command Manager initialized');
-  }
-
-  setupIsolationZoneScheduler() {
-    // Run every 5 minutes to check if we're in the time range
-    this.isolationZoneJob = cron.schedule(
-      '*/5 * * * *', // Every 5 minutes
-      async () => {
-        await this.checkAndExecuteIsolationZone();
-      },
-      {
-        timezone: 'Asia/Jakarta', // WIB timezone
-        scheduled: true
-      }
-    );
-
-    console.log('⏰ Isolation Zone Horde checker scheduled: Every 5 minutes between 7 PM - 12 AM WIB');
   }
 
   // Add method to find a notification channel
