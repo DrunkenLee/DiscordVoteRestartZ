@@ -857,8 +857,7 @@ export class DiscordBot {
             await message.channel.send('🧪 **Testing global flags Reset...**');
 
             const tankFlagUpdates = {
-              daily_tankWB02_flag: false,
-              daily_tankWB01_flag: false,
+              randomizedWorldBoss_day: false,
               supplyRun_Jessica_taken: false,
             };
 
@@ -1842,8 +1841,7 @@ export class DiscordBot {
 
           // Update global flags directly via SFTP
           const globalFlagUpdates = {
-            daily_tankWB02_flag: false,
-            daily_tankWB01_flag: false,
+            randomizedWorldBoss_day: false,
             supplyRun_Jessica_taken: false,
           };
 
@@ -1884,8 +1882,7 @@ export class DiscordBot {
 
           // Update global flags directly via SFTP
           const globalFlagUpdates = {
-            daily_tankWB03_flag: false,
-            daily_tankWB04_flag: false,
+            randomizedWorldBoss_night: false,
           };
 
           await this.sftpLogReader.updateGlobalFlags(globalFlagUpdates);

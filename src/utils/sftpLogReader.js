@@ -308,10 +308,7 @@ eventDescription=""`;
         // If file doesn't exist, create default content
         console.log('Global flags file not found, creating new one...');
         fileContent = `return {
-    ["daily_tankWB02_flag"] = true,
-    ["daily_tankWB01_flag"] = true,
-    ["weekly_test01_flag"] = true,
-    ["weekly_test02_flag"] = true,
+    ["randomizedWorldBoss_day"] = true,
     ["supplyRun_Jessica_taken"] = true,
     }`;
     }
