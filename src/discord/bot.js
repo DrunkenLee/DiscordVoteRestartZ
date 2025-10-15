@@ -1385,6 +1385,7 @@ export class DiscordBot {
           helpMessage += '!devsethours <username> <hours> - Set hours survived for player\n';
           helpMessage += '!devsetzombiekills <username> <kills> - Set zombie kills for player\n';
           helpMessage += '!devenchant <username> <minDMG> <maxDMG> <enchant> <name> - Apply enchantment to weapon\n';
+          helpMessage += '!devequipallow <username> <targetUsername> <itemType> <allow> - Set restricted gear allow for target player\n';
           helpMessage += '!devsetserverwideflag <flagname> <value> - Set server-wide flag via SFTP\n';
           helpMessage += '!devsetglobalflag <flagname> <true|false> - Set global flag via SFTP\n';
           helpMessage += '```\n\n';
@@ -1520,6 +1521,21 @@ export class DiscordBot {
           try {
             await wrappedRconClient.send(`luacmd clientexe ${username} debugapplyenchant ${minDMG} ${maxDMG} ${enchantment} ${name}`);
             message.channel.send(`✅ Applied enchantment ${enchantment} to weapon for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'equipallow') {
+          if (args.length < 4) {
+            return message.channel.send('❌ Usage: `!devequipallow <username> <targetUsername> <itemType> <allow>`');
+          }
+          const username = args[0];
+          const targetUsername = args[1];
+          const itemType = args[2];
+          const allow = args[3];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} setrestrictedgearallow ${targetUsername} ${itemType} ${allow}`);
+            message.channel.send(`✅ Set restricted gear allow for ${targetUsername} (itemType: ${itemType}, allow: ${allow})`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
