@@ -19,7 +19,10 @@ export const login = async (req, res) => {
 
     if (user) {
       const token = jwt.sign({ id: user.id, username: user.username1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
-      res.json({ token, user: { id: user.id, username: user.username1 } });
+      const userData = { ...user.toJSON() };
+      delete userData.password1;
+      delete userData.password2;
+      res.json({ token, user: userData });
     } else {
       res.status(401).json({ error: 'Invalid credentials' });
     }
