@@ -189,3 +189,18 @@ Untuk bantuan dan pertanyaan:
 - Gunakan AI assistant: `!ask [pertanyaan]`
 - Buka issue di GitHub
 - Contact admin di Discord server
+
+## Map sync endpoint
+
+This project includes a small API to pull a pre-generated `pzmap-output.tar.gz` from your game server via SFTP and extract it into the backend `public/pzmap` folder so it can be served to the frontend.
+
+How to use:
+
+1. Generate the map on your game server and create `/home/pzserver/pzmap-output.tar.gz` (see `FE/MAP_SETUP_GUIDE.md` in the frontend repo for generation instructions).
+2. Trigger the sync endpoint:
+
+```bash
+curl -X POST http://localhost:3000/map/sync
+```
+
+After a successful sync the map will be available at `http://<backend-host>:<port>/pzmap/index.html`.

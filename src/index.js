@@ -7,6 +7,8 @@ import { sequelize } from './models/index.js';
 import zmusersRouter from './api/routes/zmusers.js';
 import playerAuctionsRouter from './api/routes/playerAuctions.js';
 import authRouter from './api/routes/auth.js';
+import mapRouter from './api/routes/map.js';
+import path from 'path';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
 
 async function main() {
@@ -19,6 +21,11 @@ async function main() {
   app.use('/zmusers', zmusersRouter);
   app.use('/player-auctions', playerAuctionsRouter);
   app.use('/auth', authRouter);
+  app.use('/map', mapRouter);
+
+  // Serve static map assets (if present)
+  const pzmapStatic = path.resolve(process.cwd(), 'public', 'pzmap');
+  app.use('/pzmap', express.static(pzmapStatic));
 
   const PORT = process.env.PORT || 3000;
 
