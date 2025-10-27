@@ -23,7 +23,12 @@ export const ZMUser = sequelize.define('ZMUser', {
   password1: DataTypes.STRING,
   username2: DataTypes.STRING,
   password2: DataTypes.STRING,
-  extradata: DataTypes.TEXT
+  extradata: DataTypes.TEXT,
+  accesslevel: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: null
+  }
 }, {
   tableName: 'zmusers',
   timestamps: true,

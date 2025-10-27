@@ -1,39 +1,41 @@
 {
-    "name":  "zomboid-discord-rcon",
-    "version":  "1.0.0",
-    "main":  "src/index.js",
-    "type":  "module",
-    "scripts":  {
-                    "start":  "node src/index.js",
-                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1",
-                    "scan:auction":  "node scripts/manualAuctionScan.js"
-                },
-    "keywords":  [
-                     "Project Zomboid",
-                     "Discord",
-                     "RCON"
-                 ],
-    "author":  "Your Name",
-    "license":  "ISC",
-    "description":  "A Node.js project for integrating Project Zomboid RCON with Discord.",
-    "dependencies":  {
-                         "config":  "^3.3.9",
-                         "discord-rpc":  "^4.0.1",
-                         "discord.js":  "^14.0.0",
-                         "dotenv":  "^10.0.0",
-                         "express":  "^4.18.2",
-                         "node-cron":  "^3.0.3",
-                         "node-fetch":  "^3.3.2",
-                         "openai":  "^5.12.1",
-                         "pg":  "^8.16.0",
-                         "pg-hstore":  "^2.3.4",
-                         "rcon-client":  "^4.2.5",
-                         "sequelize":  "^6.37.1",
-                         "ssh2":  "^1.16.0",
-                         "ssh2-sftp-client":  "^12.0.0",
-                         "winston":  "^3.17.0"
-                     },
-    "devDependencies":  {
-                            "sequelize-cli":  "^6.6.3"
-                        }
+    "name": "zomboid-discord-rcon",
+    "version": "1.0.0",
+    "main": "src/index.js",
+    "type": "module",
+    "scripts": {
+        "start": "node src/index.js",
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "scan:auction": "node scripts/manualAuctionScan.js"
+    },
+    "keywords": [
+        "Project Zomboid",
+        "Discord",
+        "RCON"
+    ],
+    "author": "Your Name",
+    "license": "ISC",
+    "description": "A Node.js project for integrating Project Zomboid RCON with Discord.",
+    "dependencies": {
+        "config": "^3.3.9",
+        "cors": "^2.8.5",
+        "discord-rpc": "^4.0.1",
+        "discord.js": "^14.0.0",
+        "dotenv": "^10.0.0",
+        "express": "^4.18.2",
+        "jsonwebtoken": "^9.0.2",
+        "node-cron": "^3.0.3",
+        "node-fetch": "^3.3.2",
+        "openai": "^5.12.1",
+        "pg": "^8.16.0",
+        "pg-hstore": "^2.3.4",
+        "rcon-client": "^4.2.5",
+        "sequelize": "^6.37.1",
+        "ssh2": "^1.16.0",
+        "ssh2-sftp-client": "^12.0.0",
+        "winston": "^3.17.0"
+    },
+    "devDependencies": {
+        "sequelize-cli": "^6.6.3"
+    }
 }

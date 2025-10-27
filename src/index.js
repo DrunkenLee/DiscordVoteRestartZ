@@ -2,19 +2,23 @@ import { DiscordBot } from './discord/bot.js';
 import { RconClient } from './rcon/client.js';
 import config from './config/config.js';
 import express from 'express';
+import cors from 'cors';
 import { sequelize } from './models/index.js';
 import zmusersRouter from './api/routes/zmusers.js';
 import playerAuctionsRouter from './api/routes/playerAuctions.js';
+import authRouter from './api/routes/auth.js';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
 
 async function main() {
   // Initialize Express API server
   const app = express();
+  app.use(cors());
   app.use(express.json());
 
   // API routes
   app.use('/zmusers', zmusersRouter);
   app.use('/player-auctions', playerAuctionsRouter);
+  app.use('/auth', authRouter);
 
   const PORT = process.env.PORT || 3000;
 
