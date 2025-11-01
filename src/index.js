@@ -17,7 +17,13 @@ async function main() {
   app.use(cors());
   app.use(express.json());
 
-  // API routes
+  // API routes (prefixed with /api)
+  app.use('/api/zmusers', zmusersRouter);
+  app.use('/api/player-auctions', playerAuctionsRouter);
+  app.use('/api/auth', authRouter);
+  app.use('/api/map', mapRouter);
+
+  // Legacy (non-prefixed) routes for backward compatibility
   app.use('/zmusers', zmusersRouter);
   app.use('/player-auctions', playerAuctionsRouter);
   app.use('/auth', authRouter);
@@ -28,6 +34,7 @@ async function main() {
   app.use('/pzmap', express.static(pzmapStatic));
 
   const PORT = process.env.PORT || 3000;
+  const API_ONLY = process.env.API_ONLY === 'true';
 
   const discordBot = new DiscordBot(config.discord.token);
   let rconClient = new RconClient(config.rcon.host, config.rcon.port, config.rcon.password);
@@ -36,15 +43,22 @@ async function main() {
   const auctionLogMonitor = new AuctionLogMonitor(discordBot.client);
 
   try {
-    // First, connect to database
+    // Start API server first to allow API_ONLY mode quickly
+    app.listen(PORT, () => {
+      console.log(`API server running on port ${PORT}`);
+    });
+
+    if (API_ONLY) {
+      console.log('API_ONLY mode enabled. Skipping database, Discord bot, RCON, and auction monitor.');
+      return;
+    }
+
+    // Then, connect to database
     console.log('Connecting to database...');
     await sequelize.authenticate();
     console.log('Database connected successfully.');
 
-    // Start API server
-    app.listen(PORT, () => {
-      console.log(`API server running on port ${PORT}`);
-    });
+    // continue with Discord/RCON init when not API_ONLY
 
     // Then, log in to Discord
     console.log('Logging in to Discord...');
@@ -92,7 +106,7 @@ async function main() {
     }
 
     // If Discord connection fails, we should exit
-    if (!discordBot.client.isReady()) {
+    if (!API_ONLY && !discordBot.client.isReady()) {
       console.error('Discord connection failed. Exiting...');
       process.exit(1);
     }

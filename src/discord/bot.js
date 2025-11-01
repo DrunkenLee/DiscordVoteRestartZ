@@ -1376,46 +1376,65 @@ export class DiscordBot {
         const devCommand = command.substring(3); // Remove 'dev' prefix
 
         if (devCommand === 'help') {
-          let helpMessage = '**🔧 Developer Commands (ZM_ClientExecutor)**\n\n';
-          helpMessage += '```\n';
-          helpMessage += '!devplayersay <username> <message> - Make player say a message\n';
-          helpMessage += '!devsetflag <username> <flagname> - Set flag on player\n';
-          helpMessage += '!devremoveflag <username> <flagname> - Remove flag from player\n';
-          helpMessage += '!devtoggleflag <username> <flagname> - Toggle ZM flag on player\n';
-          helpMessage += '!devsethours <username> <hours> - Set hours survived for player\n';
-          helpMessage += '!devsetzombiekills <username> <kills> - Set zombie kills for player\n';
-          helpMessage += '!devenchant <username> <minDMG> <maxDMG> <enchant> <name> - Apply enchantment to weapon\n';
-          helpMessage += '!devequipallow <username> <targetUsername> <itemType> <allow> - Set restricted gear allow for target player\n';
-          helpMessage += '!devsetserverwideflag <flagname> <value> - Set server-wide flag via SFTP\n';
-          helpMessage += '!devsetglobalflag <flagname> <true|false> - Set global flag via SFTP\n';
-          helpMessage += '```\n\n';
-          helpMessage += '**� Player Points Management:**\n';
-          helpMessage += '```\n';
-          helpMessage += '!devaddplayerpoints <username> <points> - Add points to player\n';
-          helpMessage += '!devtakeplayerpoints <username> <points> - Take points from player\n';
-          helpMessage += '!devgetplayerpoints <username> - Get player\'s current points\n';
-          helpMessage += '!devdepositpoints <username> <amount> - Deposit points to server storage\n';
-          helpMessage += '!devdepositraidpoints <username> <amount> - Deposit raid points to server storage\n';
-          helpMessage += '!devwithdrawpoints <username> - Withdraw points from server storage\n';
-          helpMessage += '!devwithdrawraidpoints <username> - Withdraw raid points from server storage\n';
-          helpMessage += '```\n\n';
-          helpMessage += '**�🕰️ Cron Job Management:**\n';
-          helpMessage += '```\n';
-          helpMessage += '!cronstatus - Check cron job execution status and schedule\n';
-          helpMessage += '!testcron supply - Manually test supply run reset\n';
-          helpMessage += '!testcron tank - Manually test global flags reset\n';
-          helpMessage += '!testcron both - Manually test both cron jobs\n';
-          helpMessage += '```\n\n';
-          helpMessage += '**🏪 Auction System Management:**\n';
-          helpMessage += '```\n';
-          helpMessage += '!devauctionstatus - Check auction log monitor status\n';
-          helpMessage += '!devauctionscan - Manually trigger auction log scan\n';
-          helpMessage += '!devauctionstart - Start auction log monitoring\n';
-          helpMessage += '!devauctionstop - Stop auction log monitoring\n';
-          helpMessage += '```\n';
-          helpMessage += '**Note:** All commands require @admin or @developer role.\n';
-          helpMessage += '**Schedule:** Supply run reset at 12:01 PM WIB, global flags reset at 12:02 PM WIB daily.';
-          return message.channel.send(helpMessage);
+          // Split help into multiple messages to avoid Discord's 2000 character limit
+          let helpMessage1 = '**🔧 Developer Commands (ZM_ClientExecutor)**\n\n';
+          helpMessage1 += '**Basic Commands:**\n';
+          helpMessage1 += '```\n';
+          helpMessage1 += '!devplayersay <username> <message> - Make player say a message\n';
+          helpMessage1 += '!devsetflag <username> <flagname> - Set flag on player\n';
+          helpMessage1 += '!devremoveflag <username> <flagname> - Remove flag from player\n';
+          helpMessage1 += '!devtoggleflag <username> <flagname> - Toggle ZM flag on player\n';
+          helpMessage1 += '!devsethours <username> <hours> - Set hours survived for player\n';
+          helpMessage1 += '!devsetzombiekills <username> <kills> - Set zombie kills for player\n';
+          helpMessage1 += '!devenchant <username> <minDMG> <maxDMG> <enchant> <name> - Apply enchantment\n';
+          helpMessage1 += '!devequipallow <username> <target> <itemType> <allow> - Set gear allow\n';
+          helpMessage1 += '!devsetserverwideflag <flagname> <value> - Set server-wide flag\n';
+          helpMessage1 += '!devsetglobalflag <flagname> <true|false> - Set global flag\n';
+          helpMessage1 += '```';
+
+          let helpMessage2 = '**📋 Quest Management:**\n';
+          helpMessage2 += '```\n';
+          helpMessage2 += '!devresetquest <username> <questID> - Reset quest for player\n';
+          helpMessage2 += '!devlockquest <username> <questID> - Lock quest for player\n';
+          helpMessage2 += '!devunlockquest <username> <questID> - Unlock quest for player\n';
+          helpMessage2 += '```\n';
+          helpMessage2 += '**✅ Task Management:**\n';
+          helpMessage2 += '```\n';
+          helpMessage2 += '!devunlocktask <username> <questID> <taskID> - Unlock task\n';
+          helpMessage2 += '!devlocktask <username> <questID> <taskID> - Lock task\n';
+          helpMessage2 += '!devcompletetask <username> <questID> <taskID> - Complete task\n';
+          helpMessage2 += '!devresettask <username> <questID> <taskID> - Reset task\n';
+          helpMessage2 += '```\n';
+          helpMessage2 += '**💰 Player Points:**\n';
+          helpMessage2 += '```\n';
+          helpMessage2 += '!devaddplayerpoints <username> <points> - Add points\n';
+          helpMessage2 += '!devtakeplayerpoints <username> <points> - Take points\n';
+          helpMessage2 += '!devgetplayerpoints <username> - Get points\n';
+          helpMessage2 += '!devdepositpoints <username> <amount> - Deposit points\n';
+          helpMessage2 += '!devdepositraidpoints <username> <amount> - Deposit raid points\n';
+          helpMessage2 += '!devwithdrawpoints <username> - Withdraw points\n';
+          helpMessage2 += '!devwithdrawraidpoints <username> - Withdraw raid points\n';
+          helpMessage2 += '```';
+
+          let helpMessage3 = '**🕰️ Cron Job Management:**\n';
+          helpMessage3 += '```\n';
+          helpMessage3 += '!cronstatus - Check cron job status\n';
+          helpMessage3 += '!testcron supply - Test supply run reset\n';
+          helpMessage3 += '!testcron tank - Test global flags reset\n';
+          helpMessage3 += '!testcron both - Test both cron jobs\n';
+          helpMessage3 += '```\n';
+          helpMessage3 += '**🏪 Auction System:**\n';
+          helpMessage3 += '```\n';
+          helpMessage3 += '!devauctionstatus - Check auction monitor status\n';
+          helpMessage3 += '!devauctionscan - Trigger auction log scan\n';
+          helpMessage3 += '!devauctionstart - Start auction monitoring\n';
+          helpMessage3 += '!devauctionstop - Stop auction monitoring\n';
+          helpMessage3 += '```\n';
+          helpMessage3 += '**Note:** All commands require @admin or @developer role.';
+
+          await message.channel.send(helpMessage1);
+          await message.channel.send(helpMessage2);
+          return message.channel.send(helpMessage3);
         }
 
         if (devCommand === 'playersay') {
@@ -1672,6 +1691,101 @@ export class DiscordBot {
           try {
             await wrappedRconClient.send(`luacmd clientexe ${username} withdrawraidpoints ${username}`);
             message.channel.send(`✅ Sent withdraw raid points command for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'resetquest') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devresetquest <username> <questID>`');
+          }
+          const username = args[0];
+          const questID = args[1];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} resetquest ${username} ${questID}`);
+            message.channel.send(`✅ Reset quest '${questID}' for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'lockquest') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devlockquest <username> <questID>`');
+          }
+          const username = args[0];
+          const questID = args[1];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} lockquest ${username} ${questID}`);
+            message.channel.send(`✅ Locked quest '${questID}' for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'unlockquest') {
+          if (args.length < 2) {
+            return message.channel.send('❌ Usage: `!devunlockquest <username> <questID>`');
+          }
+          const username = args[0];
+          const questID = args[1];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} unlockquest ${username} ${questID}`);
+            message.channel.send(`✅ Unlocked quest '${questID}' for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'unlocktask') {
+          if (args.length < 3) {
+            return message.channel.send('❌ Usage: `!devunlocktask <username> <questID> <taskID>`');
+          }
+          const username = args[0];
+          const questID = args[1];
+          const taskID = args[2];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} unlocktask ${username} ${questID} ${taskID}`);
+            message.channel.send(`✅ Unlocked task '${taskID}' in quest '${questID}' for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'locktask') {
+          if (args.length < 3) {
+            return message.channel.send('❌ Usage: `!devlocktask <username> <questID> <taskID>`');
+          }
+          const username = args[0];
+          const questID = args[1];
+          const taskID = args[2];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} locktask ${username} ${questID} ${taskID}`);
+            message.channel.send(`✅ Locked task '${taskID}' in quest '${questID}' for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'completetask') {
+          if (args.length < 3) {
+            return message.channel.send('❌ Usage: `!devcompletetask <username> <questID> <taskID>`');
+          }
+          const username = args[0];
+          const questID = args[1];
+          const taskID = args[2];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} completetask ${username} ${questID} ${taskID}`);
+            message.channel.send(`✅ Completed task '${taskID}' in quest '${questID}' for player ${username}`);
+          } catch (error) {
+            message.channel.send(`❌ Error executing command: ${error.message}`);
+          }
+        } else if (devCommand === 'resettask') {
+          if (args.length < 3) {
+            return message.channel.send('❌ Usage: `!devresettask <username> <questID> <taskID>`');
+          }
+          const username = args[0];
+          const questID = args[1];
+          const taskID = args[2];
+
+          try {
+            await wrappedRconClient.send(`luacmd clientexe ${username} resettask ${username} ${questID} ${taskID}`);
+            message.channel.send(`✅ Reset task '${taskID}' in quest '${questID}' for player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
           }
