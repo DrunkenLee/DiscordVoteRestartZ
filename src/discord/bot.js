@@ -2042,15 +2042,34 @@ export class DiscordBot {
     );
 
     // Auction expiry checker - runs every 5 minutes
+    // cron.schedule(
+    //   '*/15 * * * *',
+    //   async () => {
+    //     const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+    //     try {
+    //       console.log(`🕐 [${executionTime}] Checking for expired auctions...`);
+    //       await this.processExpiredAuctions();
+    //     } catch (error) {
+    //       console.error(`❌ [${executionTime}] Error during expired auction check:`, error);
+    //     }
+    //   },
+    //   {
+    //     timezone: 'Asia/Jakarta', // WIB timezone
+    //   }
+    // );
+
+    // Vehicle removal notification checker - runs every N minutes (configurable)
+    const autoshopInterval = config.get('autoshop.checkIntervalMinutes') || 1;
+    const cronExpression = `*/${autoshopInterval} * * * *`;
+
     cron.schedule(
-      '*/15 * * * *',
+      cronExpression,
       async () => {
         const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
         try {
-          console.log(`🕐 [${executionTime}] Checking for expired auctions...`);
-          await this.processExpiredAuctions();
+          await this.checkVehicleRemovalNotification();
         } catch (error) {
-          console.error(`❌ [${executionTime}] Error during expired auction check:`, error);
+          logger.error(`[Cron] Vehicle removal check failed at ${executionTime}: ${error.message}`);
         }
       },
       {
@@ -2061,7 +2080,8 @@ export class DiscordBot {
     console.log('📅 Cron jobs scheduled:');
     console.log('   - Daily global flags reset at 12:02 PM WIB (via SFTP)');
     console.log('   - Daily evening world boss reset at 07:00 PM WIB (via SFTP)');
-    console.log('   - Auction expiry checker every 5 minutes');
+    console.log('   - Auction expiry checker every 15 minutes');
+    console.log(`   - Vehicle removal notification checker every ${autoshopInterval} minute(s)`);
 
     // Handle button interactions and modal submissions for auction system
     this.client.on(Events.InteractionCreate, async (interaction) => {
@@ -2629,6 +2649,97 @@ export class DiscordBot {
       }
     } catch (notificationError) {
       console.error('Failed to send cron notification to Discord:', notificationError.message);
+    }
+  }
+
+  /**
+   * Check for vehicle removal notification file via SFTP
+   * If found, parse and send Discord notification, then delete the file
+   */
+  async checkVehicleRemovalNotification() {
+    const remoteFilePath = config.get('autoshop.remoteFilePath') || '/home/pzserver/Zomboid/Lua/ZM_Autoshop_VehicleRemoval.json';
+
+    try {
+      await this.sftpLogReader.connect();
+
+      let fileContent;
+      try {
+        fileContent = await this.sftpLogReader.sftp.get(remoteFilePath);
+      } catch (err) {
+        // File doesn't exist, this is normal - just return silently
+        if (err.message.includes('No such file')) {
+          return;
+        }
+        throw err;
+      }
+
+      if (!fileContent || fileContent.length === 0) {
+        logger.warn('[VehicleRemoval] File exists but is empty');
+        return;
+      }
+
+      // Parse JSON content
+      const vehicleData = JSON.parse(fileContent.toString('utf8'));
+
+      // Send Discord notification
+      await this.sendVehicleRemovalNotification(vehicleData);
+
+      // Delete the file after successful notification
+      await this.sftpLogReader.sftp.delete(remoteFilePath);
+      logger.info(`[VehicleRemoval] Processed and deleted notification file for ${vehicleData.player}`);
+
+    } catch (error) {
+      logger.error(`[VehicleRemoval] Error checking notification: ${error.message}`);
+      throw error;
+    } finally {
+      try {
+        await this.sftpLogReader.disconnect();
+      } catch (disconnectErr) {
+        logger.warn(`[VehicleRemoval] Error disconnecting SFTP: ${disconnectErr.message}`);
+      }
+    }
+  }
+
+  /**
+   * Send vehicle removal notification to Discord
+   * @param {Object} vehicleData - Vehicle removal data from JSON file
+   */
+  async sendVehicleRemovalNotification(vehicleData) {
+    try {
+      const channelId = config.get('discord.vehicleRemovalChannelId');
+      if (!channelId) {
+        logger.error('[VehicleRemoval] Vehicle removal channel ID not configured');
+        return;
+      }
+
+      const channel = this.client.channels.cache.get(channelId);
+      if (!channel) {
+        logger.error(`[VehicleRemoval] Channel ${channelId} not found`);
+        return;
+      }
+
+      // Format timestamp
+      const timestamp = new Date(vehicleData.timestamp * 1000);
+      const timeStr = timestamp.toLocaleString('en-US', {
+        timeZone: 'Asia/Jakarta',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+
+      // Create simple, clean message
+      const message =
+        `🚗 **Vehicle Sold**\n\n` +
+        `**${vehicleData.player}** sold ***${vehicleData.vehicle}***\n` +
+        `**Points:** ${vehicleData.points.toLocaleString()} *(${vehicleData.condition}% condition)*\n` +
+        `*Time: ${timeStr} WIB*`;
+
+      await channel.send(message);
+      logger.info(`[VehicleRemoval] Sent notification for ${vehicleData.player}'s ${vehicleData.vehicle}`);
+
+    } catch (error) {
+      logger.error(`[VehicleRemoval] Error sending notification: ${error.message}`);
+      throw error;
     }
   }
 

@@ -20,13 +20,18 @@ const config = {
     token: process.env.DISCORD_BOT_TOKEN || "",
     prefix: process.env.DISCORD_PREFIX || "!",
     aiChannelId: process.env.AI_CHANNEL_ID || "1403231225430413383",
-    auctionChannelId: process.env.AUCTION_CHANNEL_ID || "1415589655587323914"
+    auctionChannelId: process.env.AUCTION_CHANNEL_ID || "1415589655587323914",
+    vehicleRemovalChannelId: process.env.VEHICLE_REMOVAL_CHANNEL_ID || "1395072755208163398"
   },
   sftp: {
     host: process.env.SFTP_HOST || "",
     port: parseInt(process.env.SFTP_PORT) || 22,
     username: process.env.SFTP_USERNAME || "",
     password: process.env.SFTP_PASSWORD || ""
+  },
+  autoshop: {
+    checkIntervalMinutes: parseInt(process.env.AUTOSHOP_CHECK_INTERVAL) || 1,
+    remoteFilePath: process.env.AUTOSHOP_REMOTE_FILE_PATH || "/home/pzserver/Zomboid/Lua/ZM_Autoshop_VehicleRemoval.json"
   },
   battlemetrics: {
     apiKey: process.env.BATTLEMETRICS_API_KEY || "",

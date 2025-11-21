@@ -7,9 +7,14 @@
   "discord": {
     "token": "",
     "prefix": "!",
-    "auctionChannelId": "1415589655587323914"
+    "auctionChannelId": "1415589655587323914",
+    "vehicleRemovalChannelId": "1395072755208163398"
   },
   "logging": {
     "level": "info"
+  },
+  "autoshop": {
+    "checkIntervalMinutes": 1,
+    "remoteFilePath": "/home/pzserver/Zomboid/Lua/ZM_Autoshop_VehicleRemoval.json"
   }
 }
