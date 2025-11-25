@@ -5,6 +5,8 @@ export class SftpLogReader {
   constructor() {
     this.sftp = new SftpClient();
     this.isConnected = false;
+    this.connectionQueue = Promise.resolve();
+    this.operationCount = 0;
   }
 
   async connect() {
@@ -24,6 +26,7 @@ export class SftpLogReader {
       console.log('SFTP connected successfully');
     } catch (error) {
       console.error('SFTP connection error:', error);
+      this.isConnected = false;
       throw error;
     }
   }
@@ -37,6 +40,36 @@ export class SftpLogReader {
       console.log('SFTP disconnected');
     } catch (error) {
       console.error('SFTP disconnection error:', error);
+      this.isConnected = false;
+    }
+  }
+
+  /**
+   * Execute an operation with proper connection queuing to prevent conflicts
+   * @param {Function} operation - Async function to execute with SFTP
+   * @returns {Promise} - Result of the operation
+   */
+  async executeWithQueue(operation) {
+    // Queue this operation after any pending operations
+    const previousOperation = this.connectionQueue;
+
+    let resolver;
+    const currentOperation = new Promise((resolve) => {
+      resolver = resolve;
+    });
+
+    this.connectionQueue = currentOperation;
+
+    try {
+      // Wait for previous operations to complete
+      await previousOperation;
+
+      // Execute this operation
+      const result = await operation();
+      return result;
+    } finally {
+      // Mark this operation as complete
+      resolver();
     }
   }
 
@@ -47,151 +80,175 @@ export class SftpLogReader {
   }
 
   async checkForModUpdates() {
-    try {
-      const logPath = await this.findLatestLogFile();
+    return this.executeWithQueue(async () => {
+      try {
+        await this.connect();
 
-      // Read the log file
-      const logContent = await this.sftp.get(logPath);
+        const logPath = '/home/pzserver/Zomboid/server-console.txt';
+        console.log(`[ModUpdateChecker] Reading log file: ${logPath}`);
 
-      // Split content into lines and get the last 50 lines
-      const lines = logContent.toString().split('\n');
-      const lastLines = lines.slice(-5000);
-
-      // Look for mod update messages in the recent lines
-      for (let i = lastLines.length - 1; i >= 0; i--) {
-        const line = lastLines[i];
-        console.log({ line });
-        if (line.includes('CheckModsNeedUpdate: Mods updated')) {
+        // Read the log file - simplified approach
+        let logContent;
+        try {
+          logContent = await this.sftp.get(logPath);
+        } catch (getError) {
+          console.error('[ModUpdateChecker] Failed to read log file:', getError.message);
           return {
-            success: true,
-            needsUpdate: false,
-            message: 'Mods are up to date',
-          };
-        } else if (line.includes('Mods need update')) {
-          return {
-            success: true,
-            needsUpdate: true,
-            message: 'Mods need updates',
+            success: false,
+            message: `Unable to read server log: ${getError.message}`
           };
         }
+
+        // Split content into lines and get the last 5000 lines
+        const lines = logContent.toString('utf8').split('\n');
+        const lastLines = lines.slice(-5000);
+
+        console.log(`[ModUpdateChecker] Scanning ${lastLines.length} recent log lines...`);
+
+        // Look for mod update messages in the recent lines
+        for (let i = lastLines.length - 1; i >= 0; i--) {
+          const line = lastLines[i];
+          if (line.includes('CheckModsNeedUpdate: Mods updated')) {
+            console.log('[ModUpdateChecker] Found: Mods are up to date');
+            return {
+              success: true,
+              needsUpdate: false,
+              message: 'Mods are up to date',
+            };
+          } else if (line.includes('Mods need update')) {
+            console.log('[ModUpdateChecker] Found: Mods need updates');
+            return {
+              success: true,
+              needsUpdate: true,
+              message: 'Mods need updates',
+            };
+          }
+        }
+
+        return {
+          success: false,
+          message: 'No mod update information found in recent logs (checked last 5000 lines)'
+        };
+
+      } catch (error) {
+        console.error('[ModUpdateChecker] Error checking for mod updates:', error);
+        return {
+          success: false,
+          message: `Error: ${error.message}`
+        };
+      } finally {
+        await this.disconnect();
       }
-
-      return {
-        success: false,
-        message: 'No mod update information found in logs'
-      };
-
-    } catch (error) {
-      console.error('Error checking for mod updates:', error);
-      return {
-        success: false,
-        message: `Error: ${error.message}`
-      };
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   async getKillBoard(filename) {
-    try {
-      await this.connect();
-      const iniPath = `/home/pzserver/Zomboid/Lua/${filename}`;
-      const iniContent = await this.sftp.get(iniPath);
-      const lines = iniContent.toString().split('\n');
-      const killCounts = [];
-      let inSection = false;
-      let sectionName = '[KillCounts]';
-      // Detect section for RavenCreek file
-      if (filename.toLowerCase().includes('ravencreek')) {
-        sectionName = '[RavenCreekKillCounts]';
-      }
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith(sectionName)) {
-          inSection = true;
-          continue;
+    return this.executeWithQueue(async () => {
+      try {
+        await this.connect();
+        const iniPath = `/home/pzserver/Zomboid/Lua/${filename}`;
+        const iniContent = await this.sftp.get(iniPath);
+        const lines = iniContent.toString().split('\n');
+        const killCounts = [];
+        let inSection = false;
+        let sectionName = '[KillCounts]';
+        // Detect section for RavenCreek file
+        if (filename.toLowerCase().includes('ravencreek')) {
+          sectionName = '[RavenCreekKillCounts]';
         }
-        if (inSection && trimmed && !trimmed.startsWith(';') && trimmed.includes('=')) {
-          const [name, kills] = trimmed.split('=');
-          killCounts.push({ name: name.trim(), kills: parseInt(kills.trim(), 10) || 0 });
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith(sectionName)) {
+            inSection = true;
+            continue;
+          }
+          if (inSection && trimmed && !trimmed.startsWith(';') && trimmed.includes('=')) {
+            const [name, kills] = trimmed.split('=');
+            killCounts.push({ name: name.trim(), kills: parseInt(kills.trim(), 10) || 0 });
+          }
         }
+        // Sort descending and take top 10
+        killCounts.sort((a, b) => b.kills - a.kills);
+        return killCounts.slice(0, 10);
+      } catch (error) {
+        console.error('Error reading killboard:', error);
+        return [];
+      } finally {
+        await this.disconnect();
       }
-      // Sort descending and take top 10
-      killCounts.sort((a, b) => b.kills - a.kills);
-      return killCounts.slice(0, 10);
-    } catch (error) {
-      console.error('Error reading killboard:', error);
-      return [];
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   async getServerPointDepositByUsername(username) {
-    try {
-      await this.connect();
-      const iniPath = `/home/pzserver/Zomboid/Lua/Deposits/${username}_deposits.ini`;
-      const iniContent = await this.sftp.get(iniPath);
-      const lines = iniContent.toString().split('\n');
-      let total = 0;
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('Amount=')) {
-          const amount = parseInt(trimmed.split('=')[1], 10);
-          if (!isNaN(amount)) {
-            total += amount;
+    return this.executeWithQueue(async () => {
+      try {
+        await this.connect();
+        const iniPath = `/home/pzserver/Zomboid/Lua/Deposits/${username}_deposits.ini`;
+        const iniContent = await this.sftp.get(iniPath);
+        const lines = iniContent.toString().split('\n');
+        let total = 0;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('Amount=')) {
+            const amount = parseInt(trimmed.split('=')[1], 10);
+            if (!isNaN(amount)) {
+              total += amount;
+            }
           }
         }
+        return total;
+      } catch (error) {
+        console.error('Error reading file:', error);
+        return 0;
+      } finally {
+        await this.disconnect();
       }
-      return total;
-    } catch (error) {
-      console.error('Error reading file:', error);
-      return 0;
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   async getRaidPointsDepositByUsername(username) {
-    try {
-      await this.connect();
-      const iniPath = `/home/pzserver/Zomboid/Lua/RaidDeposits/${username}_raiddeposits.ini`;
-      const iniContent = await this.sftp.get(iniPath);
-      const lines = iniContent.toString().split('\n');
-      let total = 0;
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('Amount=')) {
-          const amount = parseInt(trimmed.split('=')[1], 10);
-          if (!isNaN(amount)) {
-            total += amount;
+    return this.executeWithQueue(async () => {
+      try {
+        await this.connect();
+        const iniPath = `/home/pzserver/Zomboid/Lua/RaidDeposits/${username}_raiddeposits.ini`;
+        const iniContent = await this.sftp.get(iniPath);
+        const lines = iniContent.toString().split('\n');
+        let total = 0;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('Amount=')) {
+            const amount = parseInt(trimmed.split('=')[1], 10);
+            if (!isNaN(amount)) {
+              total += amount;
+            }
           }
         }
+        return total;
+      } catch (error) {
+        console.error('Error reading file:', error);
+        return 0;
+      } finally {
+        await this.disconnect();
       }
-      return total;
-    } catch (error) {
-      console.error('Error reading file:', error);
-      return 0;
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   async updateServerFlag(flagName, value) {
-    try {
-      await this.connect();
-
-      const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
-
-      // Read current file content
-      let fileContent;
+    return this.executeWithQueue(async () => {
       try {
-        const buffer = await this.sftp.get(flagsFilePath);
-        fileContent = buffer.toString('utf8');
-      } catch (readError) {
-        // If file doesn't exist, create default content
-        console.log('Server flags file not found, creating new one...');
-        fileContent = `[ServerFlags]
+        await this.connect();
+
+        const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
+
+        // Read current file content
+        let fileContent;
+        try {
+          const buffer = await this.sftp.get(flagsFilePath);
+          fileContent = buffer.toString('utf8');
+        } catch (readError) {
+          // If file doesn't exist, create default content
+          console.log('Server flags file not found, creating new one...');
+          fileContent = `[ServerFlags]
 supplyRunAvailableFlag=0
 expeditionRunAvailableFlag=0
 eventActiveFlag=0
@@ -202,67 +259,9 @@ tradingEnabledFlag=1
 questSystemEnabledFlag=1
 serverMessage="Welcome to ZonaMerah"
 eventDescription=""`;
-      }
-
-      // Update the specific flag
-      const flagPattern = new RegExp(`^${flagName}=.*$`, 'm');
-      if (flagPattern.test(fileContent)) {
-        // Flag exists, update it
-        fileContent = fileContent.replace(flagPattern, `${flagName}=${value}`);
-      } else {
-        // Flag doesn't exist, add it under [ServerFlags] section
-        const serverFlagsPattern = /(\[ServerFlags\]\s*\n)/;
-        if (serverFlagsPattern.test(fileContent)) {
-          fileContent = fileContent.replace(serverFlagsPattern, `$1${flagName}=${value}\n`);
-        } else {
-          // No [ServerFlags] section, add everything
-          fileContent = `[ServerFlags]\n${flagName}=${value}\n` + fileContent;
         }
-      }
 
-      // Write updated content back to file
-      await this.sftp.put(Buffer.from(fileContent, 'utf8'), flagsFilePath);
-
-      console.log(`✅ Updated server flag '${flagName}' to '${value}' in ${flagsFilePath}`);
-      return true;
-
-    } catch (error) {
-      console.error('Error updating server flag:', error);
-      throw error;
-    } finally {
-      await this.disconnect();
-    }
-  }
-
-  async updateMultipleServerFlags(flagUpdates) {
-    try {
-      await this.connect();
-
-      const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
-
-      // Read current file content
-      let fileContent;
-      try {
-        const buffer = await this.sftp.get(flagsFilePath);
-        fileContent = buffer.toString('utf8');
-      } catch (readError) {
-        // If file doesn't exist, create default content
-        console.log('Server flags file not found, creating new one...');
-        fileContent = `[ServerFlags]
-supplyRunAvailableFlag=0
-expeditionRunAvailableFlag=0
-eventActiveFlag=0
-maintenanceModeFlag=0
-specialEventFlag=0
-pvpEnabledFlag=0
-tradingEnabledFlag=1
-questSystemEnabledFlag=1
-serverMessage="Welcome to ZonaMerah"
-eventDescription=""`;
-      }
-
-      // Update each flag
-      for (const [flagName, value] of Object.entries(flagUpdates)) {
+        // Update the specific flag
         const flagPattern = new RegExp(`^${flagName}=.*$`, 'm');
         if (flagPattern.test(fileContent)) {
           // Flag exists, update it
@@ -277,72 +276,135 @@ eventDescription=""`;
             fileContent = `[ServerFlags]\n${flagName}=${value}\n` + fileContent;
           }
         }
+
+        // Write updated content back to file
+        await this.sftp.put(Buffer.from(fileContent, 'utf8'), flagsFilePath);
+
+        console.log(`✅ Updated server flag '${flagName}' to '${value}' in ${flagsFilePath}`);
+        return true;
+
+      } catch (error) {
+        console.error('Error updating server flag:', error);
+        throw error;
+      } finally {
+        await this.disconnect();
       }
+    });
+  }
 
-      // Write updated content back to file
-      await this.sftp.put(Buffer.from(fileContent, 'utf8'), flagsFilePath);
+  async updateMultipleServerFlags(flagUpdates) {
+    return this.executeWithQueue(async () => {
+      try {
+        await this.connect();
 
-      console.log(`✅ Updated multiple server flags in ${flagsFilePath}:`, flagUpdates);
-      return true;
+        const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
 
-    } catch (error) {
-      console.error('Error updating multiple server flags:', error);
-      throw error;
-    } finally {
-      await this.disconnect();
-    }
+        // Read current file content
+        let fileContent;
+        try {
+          const buffer = await this.sftp.get(flagsFilePath);
+          fileContent = buffer.toString('utf8');
+        } catch (readError) {
+          // If file doesn't exist, create default content
+          console.log('Server flags file not found, creating new one...');
+          fileContent = `[ServerFlags]
+supplyRunAvailableFlag=0
+expeditionRunAvailableFlag=0
+eventActiveFlag=0
+maintenanceModeFlag=0
+specialEventFlag=0
+pvpEnabledFlag=0
+tradingEnabledFlag=1
+questSystemEnabledFlag=1
+serverMessage="Welcome to ZonaMerah"
+eventDescription=""`;
+        }
+
+        // Update each flag
+        for (const [flagName, value] of Object.entries(flagUpdates)) {
+          const flagPattern = new RegExp(`^${flagName}=.*$`, 'm');
+          if (flagPattern.test(fileContent)) {
+            // Flag exists, update it
+            fileContent = fileContent.replace(flagPattern, `${flagName}=${value}`);
+          } else {
+            // Flag doesn't exist, add it under [ServerFlags] section
+            const serverFlagsPattern = /(\[ServerFlags\]\s*\n)/;
+            if (serverFlagsPattern.test(fileContent)) {
+              fileContent = fileContent.replace(serverFlagsPattern, `$1${flagName}=${value}\n`);
+            } else {
+              // No [ServerFlags] section, add everything
+              fileContent = `[ServerFlags]\n${flagName}=${value}\n` + fileContent;
+            }
+          }
+        }
+
+        // Write updated content back to file
+        await this.sftp.put(Buffer.from(fileContent, 'utf8'), flagsFilePath);
+
+        console.log(`✅ Updated multiple server flags in ${flagsFilePath}:`, flagUpdates);
+        return true;
+
+      } catch (error) {
+        console.error('Error updating multiple server flags:', error);
+        throw error;
+      } finally {
+        await this.disconnect();
+      }
+    });
   }
 
   async updateGlobalFlags(flagUpdates) {
-    try {
-      await this.connect();
-
-      const globalFlagsFilePath = '/home/pzserver/Zomboid/Lua/ZMData/ZM_GlobalFlags.lua';
-
-      // Read current file content
-      let fileContent;
+    return this.executeWithQueue(async () => {
       try {
-        const buffer = await this.sftp.get(globalFlagsFilePath);
-        fileContent = buffer.toString('utf8');
-      } catch (readError) {
-        // If file doesn't exist, create default content
-        console.log('Global flags file not found, creating new one...');
-        fileContent = `return {
+        await this.connect();
+
+        const globalFlagsFilePath = '/home/pzserver/Zomboid/Lua/ZMData/ZM_GlobalFlags.lua';
+
+        // Read current file content
+        let fileContent;
+        try {
+          const buffer = await this.sftp.get(globalFlagsFilePath);
+          fileContent = buffer.toString('utf8');
+        } catch (readError) {
+          // If file doesn't exist, create default content
+          console.log('Global flags file not found, creating new one...');
+          fileContent = `return {
     ["randomizedWorldBoss_day"] = true,
     ["supplyRun_Jessica_taken"] = true,
     }`;
-    }
+        }
 
-      // Update each flag in the Lua format
-      for (const [flagName, value] of Object.entries(flagUpdates)) {
-        const flagPattern = new RegExp(`(\\["${flagName}"\\]\\s*=\\s*)(true|false)`, 'g');
-        if (flagPattern.test(fileContent)) {
-          // Flag exists, update it
-          fileContent = fileContent.replace(flagPattern, `$1${value}`);
-        } else {
-          // Flag doesn't exist, add it before the closing brace
-          const closingBracePattern = /(\s*}[^}]*$)/;
-          if (closingBracePattern.test(fileContent)) {
-            fileContent = fileContent.replace(closingBracePattern, `    ["${flagName}"] = ${value},\n$1`);
+        // Update each flag in the Lua format
+        for (const [flagName, value] of Object.entries(flagUpdates)) {
+          const flagPattern = new RegExp(`(\\["${flagName}"\\]\\s*=\\s*)(true|false)`, 'g');
+          if (flagPattern.test(fileContent)) {
+            // Flag exists, update it
+            fileContent = fileContent.replace(flagPattern, `$1${value}`);
           } else {
-            // No proper structure, create one
-            fileContent = `return {\n    ["${flagName}"] = ${value},\n}`;
+            // Flag doesn't exist, add it before the closing brace
+            const closingBracePattern = /(\s*}[^}]*$)/;
+            if (closingBracePattern.test(fileContent)) {
+              fileContent = fileContent.replace(closingBracePattern, `    ["${flagName}"] = ${value},\n$1`);
+            } else {
+              // No proper structure, create one
+              fileContent = `return {\n    ["${flagName}"] = ${value},\n}`;
+            }
           }
         }
+
+        // Write updated content back to file
+        await this.sftp.put(Buffer.from(fileContent, 'utf8'), globalFlagsFilePath);
+
+        console.log(`✅ Updated global flags in ${globalFlagsFilePath}:`, flagUpdates);
+        return true;
+
+      } catch (error) {
+        console.error('Error updating global flags:', error);
+        throw error;
+      } finally {
+        await this.disconnect();
       }
-
-      // Write updated content back to file
-      await this.sftp.put(Buffer.from(fileContent, 'utf8'), globalFlagsFilePath);
-
-      console.log(`✅ Updated global flags in ${globalFlagsFilePath}:`, flagUpdates);
-      return true;
-
-    } catch (error) {
-      console.error('Error updating global flags:', error);
-      throw error;
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   /**
@@ -352,96 +414,98 @@ eventDescription=""`;
    * @returns {Object} - { auctionEntries: Array<object>, filesProcessed: Array<string>, newPosition: number, success: boolean }
    */
   async scanForAuctionLogs(startPosition = 0) {
-    try {
-      await this.connect();
-
-      const auctionLogDir = '/home/pzserver/Zomboid/Lua';
-      console.log(`[AuctionLogScanner] Scanning auction log directory: ${auctionLogDir}`);
-
-      // List files in the directory and filter by pattern auction_data*.jsonl
-      let listing = [];
+    return this.executeWithQueue(async () => {
       try {
-        listing = await this.sftp.list(auctionLogDir);
-      } catch (e) {
-        console.error(`[AuctionLogScanner] Failed to list directory ${auctionLogDir}:`, e);
-        return {
-          auctionEntries: [],
-          filesProcessed: [],
-          newPosition: 0,
-          success: false,
-          error: e.message
-        };
-      }
+        await this.connect();
 
-      const candidates = listing
-        .filter(f => f.type === '-' && f.name.startsWith('auction_data') && f.name.endsWith('.jsonl'))
-        // Sort by modified time ascending (older first), fallback to name
-        .sort((a, b) => (a.modifyTime || 0) - (b.modifyTime || 0) || a.name.localeCompare(b.name));
+        const auctionLogDir = '/home/pzserver/Zomboid/Lua';
+        console.log(`[AuctionLogScanner] Scanning auction log directory: ${auctionLogDir}`);
 
-      if (candidates.length === 0) {
-        return {
-          auctionEntries: [],
-          filesProcessed: [],
-          newPosition: 0,
-          success: true,
-          message: 'No auction_data*.jsonl files found - nothing to process'
-        };
-      }
-
-      const auctionEntries = [];
-      const filesProcessed = [];
-
-      for (const file of candidates) {
-        const filePath = `${auctionLogDir}/${file.name}`;
-        console.log(`[AuctionLogScanner] Reading auction log file: ${filePath}`);
+        // List files in the directory and filter by pattern auction_data*.jsonl
+        let listing = [];
         try {
-          const contentBuf = await this.sftp.get(filePath);
-          const content = contentBuf.toString();
-          const lines = content.split('\n');
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (!trimmedLine) continue;
-            try {
-              const auctionEntry = JSON.parse(trimmedLine);
-              auctionEntries.push(auctionEntry);
-              console.log(`[AuctionLogScanner] Found auction entry:`, {
-                action: auctionEntry.action,
-                timestamp: auctionEntry.timestamp,
-                data: auctionEntry.data
-              });
-            } catch (parseError) {
-              console.error(`[AuctionLogScanner] Failed to parse JSON line in ${file.name}:`, parseError);
-              console.error(`[AuctionLogScanner] Raw line:`, trimmedLine);
-            }
-          }
-          filesProcessed.push(filePath);
-        } catch (readErr) {
-          console.error(`[AuctionLogScanner] Error reading file ${filePath}:`, readErr);
-          // Skip this file; do not mark as processed so it can be retried
+          listing = await this.sftp.list(auctionLogDir);
+        } catch (e) {
+          console.error(`[AuctionLogScanner] Failed to list directory ${auctionLogDir}:`, e);
+          return {
+            auctionEntries: [],
+            filesProcessed: [],
+            newPosition: 0,
+            success: false,
+            error: e.message
+          };
         }
+
+        const candidates = listing
+          .filter(f => f.type === '-' && f.name.startsWith('auction_data') && f.name.endsWith('.jsonl'))
+          // Sort by modified time ascending (older first), fallback to name
+          .sort((a, b) => (a.modifyTime || 0) - (b.modifyTime || 0) || a.name.localeCompare(b.name));
+
+        if (candidates.length === 0) {
+          return {
+            auctionEntries: [],
+            filesProcessed: [],
+            newPosition: 0,
+            success: true,
+            message: 'No auction_data*.jsonl files found - nothing to process'
+          };
+        }
+
+        const auctionEntries = [];
+        const filesProcessed = [];
+
+        for (const file of candidates) {
+          const filePath = `${auctionLogDir}/${file.name}`;
+          console.log(`[AuctionLogScanner] Reading auction log file: ${filePath}`);
+          try {
+            const contentBuf = await this.sftp.get(filePath);
+            const content = contentBuf.toString();
+            const lines = content.split('\n');
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (!trimmedLine) continue;
+              try {
+                const auctionEntry = JSON.parse(trimmedLine);
+                auctionEntries.push(auctionEntry);
+                console.log(`[AuctionLogScanner] Found auction entry:`, {
+                  action: auctionEntry.action,
+                  timestamp: auctionEntry.timestamp,
+                  data: auctionEntry.data
+                });
+              } catch (parseError) {
+                console.error(`[AuctionLogScanner] Failed to parse JSON line in ${file.name}:`, parseError);
+                console.error(`[AuctionLogScanner] Raw line:`, trimmedLine);
+              }
+            }
+            filesProcessed.push(filePath);
+          } catch (readErr) {
+            console.error(`[AuctionLogScanner] Error reading file ${filePath}:`, readErr);
+            // Skip this file; do not mark as processed so it can be retried
+          }
+        }
+
+        console.log(`[AuctionLogScanner] Scan complete. Found ${auctionEntries.length} auction entries across ${filesProcessed.length} files.`);
+
+        // In multi-file mode, newPosition is not meaningful; set to 0
+        return {
+          auctionEntries,
+          filesProcessed,
+          newPosition: 0,
+          success: true
+        };
+
+      } catch (error) {
+        console.error('[AuctionLogScanner] Error scanning auction logs:', error);
+        return {
+          auctionEntries: [],
+          newPosition: startPosition,
+          success: false,
+          error: error.message
+        };
+      } finally {
+        await this.disconnect();
       }
-
-      console.log(`[AuctionLogScanner] Scan complete. Found ${auctionEntries.length} auction entries across ${filesProcessed.length} files.`);
-
-      // In multi-file mode, newPosition is not meaningful; set to 0
-      return {
-        auctionEntries,
-        filesProcessed,
-        newPosition: 0,
-        success: true
-      };
-
-    } catch (error) {
-      console.error('[AuctionLogScanner] Error scanning auction logs:', error);
-      return {
-        auctionEntries: [],
-        newPosition: startPosition,
-        success: false,
-        error: error.message
-      };
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   /**
@@ -449,33 +513,35 @@ eventDescription=""`;
    * @returns {number} - Current file size in bytes
    */
   async getAuctionLogFileSize() {
-    try {
-      await this.connect();
-      const auctionLogDir = '/home/pzserver/Zomboid/Lua';
+    return this.executeWithQueue(async () => {
       try {
-        const listing = await this.sftp.list(auctionLogDir);
-        const files = listing.filter(f => f.type === '-' && f.name.startsWith('auction_data') && f.name.endsWith('.jsonl'));
-        // Return total bytes as a rough metric
-        let total = 0;
-        for (const f of files) {
-          try {
-            const st = await this.sftp.stat(`${auctionLogDir}/${f.name}`);
-            total += st.size || 0;
-          } catch {
-            // ignore stat errors for individual files
+        await this.connect();
+        const auctionLogDir = '/home/pzserver/Zomboid/Lua';
+        try {
+          const listing = await this.sftp.list(auctionLogDir);
+          const files = listing.filter(f => f.type === '-' && f.name.startsWith('auction_data') && f.name.endsWith('.jsonl'));
+          // Return total bytes as a rough metric
+          let total = 0;
+          for (const f of files) {
+            try {
+              const st = await this.sftp.stat(`${auctionLogDir}/${f.name}`);
+              total += st.size || 0;
+            } catch {
+              // ignore stat errors for individual files
+            }
           }
+          return total;
+        } catch (e) {
+          console.log('[AuctionLogScanner] Auction log directory not accessible, returning size 0');
+          return 0;
         }
-        return total;
-      } catch (e) {
-        console.log('[AuctionLogScanner] Auction log directory not accessible, returning size 0');
+      } catch (error) {
+        console.error('[AuctionLogScanner] Error getting auction log file size:', error);
         return 0;
+      } finally {
+        await this.disconnect();
       }
-    } catch (error) {
-      console.error('[AuctionLogScanner] Error getting auction log file size:', error);
-      return 0;
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   /**
@@ -485,24 +551,27 @@ eventDescription=""`;
    */
   async deleteAuctionLogFiles(filePaths = []) {
     if (!Array.isArray(filePaths) || filePaths.length === 0) return true;
-    try {
-      await this.connect();
-      for (const fp of filePaths) {
-        try {
-          await this.sftp.delete(fp);
-          console.log(`[AuctionLogScanner] Deleted processed auction log file: ${fp}`);
-        } catch (e) {
-          console.error(`[AuctionLogScanner] Failed to delete ${fp}:`, e);
-          throw e;
+
+    return this.executeWithQueue(async () => {
+      try {
+        await this.connect();
+        for (const fp of filePaths) {
+          try {
+            await this.sftp.delete(fp);
+            console.log(`[AuctionLogScanner] Deleted processed auction log file: ${fp}`);
+          } catch (e) {
+            console.error(`[AuctionLogScanner] Failed to delete ${fp}:`, e);
+            throw e;
+          }
         }
+        return true;
+      } catch (error) {
+        console.error('[AuctionLogScanner] Error deleting auction log files:', error);
+        throw error;
+      } finally {
+        await this.disconnect();
       }
-      return true;
-    } catch (error) {
-      console.error('[AuctionLogScanner] Error deleting auction log files:', error);
-      throw error;
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   /**
@@ -511,6 +580,8 @@ eventDescription=""`;
    * @returns {number} - Next available auction number (1 if no files exist)
    */
   async getNextAuctionNumber(keepConnection = false) {
+    // Note: This method is called within createAuctionWinFile which is already queued,
+    // so we don't need to wrap it again to avoid double-queueing
     try {
       await this.connect();
       const auctionLogDir = '/home/pzserver/Zomboid/Lua/AuctionLog';
@@ -560,38 +631,40 @@ eventDescription=""`;
    * @returns {boolean} - True if file creation succeeded
    */
   async createAuctionWinFile(playerUsername, auctionData) {
-    try {
-      await this.connect();
-
-      // Get next sequential auction number (keep connection open)
-      const auctionNumber = await this.getNextAuctionNumber(true);
-      const fileName = `auction${auctionNumber}.json`;
-      const auctionLogDir = '/home/pzserver/Zomboid/Lua/AuctionLog';
-      const filePath = `${auctionLogDir}/${fileName}`;
-
-      // Ensure directory exists (create if not)
+    return this.executeWithQueue(async () => {
       try {
-        await this.sftp.stat(auctionLogDir);
-      } catch (statError) {
-        // Directory doesn't exist, create it
-        await this.sftp.mkdir(auctionLogDir, true);
-        console.log(`[AuctionWin] Created directory: ${auctionLogDir}`);
+        await this.connect();
+
+        // Get next sequential auction number (keep connection open)
+        const auctionNumber = await this.getNextAuctionNumber(true);
+        const fileName = `auction${auctionNumber}.json`;
+        const auctionLogDir = '/home/pzserver/Zomboid/Lua/AuctionLog';
+        const filePath = `${auctionLogDir}/${fileName}`;
+
+        // Ensure directory exists (create if not)
+        try {
+          await this.sftp.stat(auctionLogDir);
+        } catch (statError) {
+          // Directory doesn't exist, create it
+          await this.sftp.mkdir(auctionLogDir, true);
+          console.log(`[AuctionWin] Created directory: ${auctionLogDir}`);
+        }
+
+        // Format auction data as JSON for Lua consumption
+        const jsonContent = this.formatAuctionWinDataAsJSON(auctionData);
+
+        // Write JSON file to server
+        await this.sftp.put(Buffer.from(jsonContent, 'utf8'), filePath);
+        console.log(`[AuctionWin] Created auction win JSON file: ${filePath} (for player: ${playerUsername})`);
+
+        return true;
+      } catch (error) {
+        console.error('[AuctionWin] Error creating auction win file:', error);
+        throw error;
+      } finally {
+        await this.disconnect();
       }
-
-      // Format auction data as JSON for Lua consumption
-      const jsonContent = this.formatAuctionWinDataAsJSON(auctionData);
-
-      // Write JSON file to server
-      await this.sftp.put(Buffer.from(jsonContent, 'utf8'), filePath);
-      console.log(`[AuctionWin] Created auction win JSON file: ${filePath} (for player: ${playerUsername})`);
-
-      return true;
-    } catch (error) {
-      console.error('[AuctionWin] Error creating auction win file:', error);
-      throw error;
-    } finally {
-      await this.disconnect();
-    }
+    });
   }
 
   /**
