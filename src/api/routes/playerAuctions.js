@@ -1,6 +1,7 @@
 import express from 'express';
 import { Op } from 'sequelize';
 import { PlayerAuction } from '../../models/playerAuction.js';
+import { ZMUser } from '../../models/zmuser.js';
 
 const router = express.Router();
 
@@ -54,12 +55,51 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/player-auctions/user/:userId
+// Get all auctions for a specific user (by ZMUser ID)
+// Matches sellername against user's username1 and username2
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const user = await ZMUser.findByPk(req.params.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const usernames = [user.username1, user.username2].filter(Boolean);
+    if (usernames.length === 0) {
+      return res.json([]);
+    }
+
+    const auctions = await PlayerAuction.findAll({
+      where: {
+        sellername: { [Op.in]: usernames }
+      },
+      order: [['createdAt', 'DESC']],
+      attributes: {
+        exclude: ['moddata', 'itemdata']
+      }
+    });
+
+    res.json(auctions);
+  } catch (err) {
+    console.error('Error fetching user auctions:', err);
+    res.status(500).json({ message: 'Failed to fetch user auctions' });
+  }
+});
+
+// GET /api/player-auctions/:id
+// Returns full auction details including all fields (moddata, itemdata, etc.)
 router.get('/:id', async (req, res) => {
-  const auction = await PlayerAuction.findByPk(req.params.id);
-  if (auction) {
-    res.json(auction);
-  } else {
-    res.sendStatus(404);
+  try {
+    const auction = await PlayerAuction.findByPk(req.params.id);
+    if (auction) {
+      res.json(auction);
+    } else {
+      res.status(404).json({ message: 'Auction not found' });
+    }
+  } catch (err) {
+    console.error('Error fetching auction details:', err);
+    res.status(500).json({ message: 'Failed to fetch auction details' });
   }
 });
 
@@ -69,6 +109,59 @@ router.post('/', async (req, res) => {
     res.status(201).json(auction);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/player-auctions/:id/manage
+// Update auction status or price (owner only)
+// Body: { userId, status?, itemprice? }
+router.patch('/:id/manage', async (req, res) => {
+  try {
+    const { userId, status, itemprice } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+
+    // Verify user exists
+    const user = await ZMUser.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Get the auction
+    const auction = await PlayerAuction.findByPk(req.params.id);
+    if (!auction) {
+      return res.status(404).json({ message: 'Auction not found' });
+    }
+
+    // Verify ownership - check if sellername matches user's username1 or username2
+    const usernames = [user.username1, user.username2].filter(Boolean);
+    if (!usernames.includes(auction.sellername)) {
+      return res.status(403).json({ message: 'You do not own this auction' });
+    }
+
+    // Build update object with only allowed fields
+    const updateData = {};
+    if (status !== undefined) {
+      updateData.status = status;
+    }
+    if (itemprice !== undefined) {
+      updateData.itemprice = itemprice;
+    }
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
+    }
+
+    // Update the auction
+    await auction.update(updateData);
+
+    res.json(auction);
+  } catch (err) {
+    console.error('Error managing auction:', err);
+    res.status(500).json({ message: 'Failed to update auction' });
   }
 });
 
