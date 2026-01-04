@@ -11,7 +11,7 @@ import dotenv from 'dotenv';
 import * as zmUsersDb from '../utils/zmUsersDb.js';
 import cron from 'node-cron';
 dotenv.config();
-import RPC from 'discord-rpc';
+// import RPC from 'discord-rpc'; // Not needed for bot applications
 import { BotLuaCommandManager } from './bot_luacmd.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -92,61 +92,18 @@ export class DiscordBot {
 
   async login() {
     await this.client.login(this.token);
-    this.setupRichPresence();
+    // Rich Presence disabled - not needed for bot applications
+    // this.setupRichPresence();
     return true;
   }
 
+  // Discord Rich Presence is disabled because it's for user applications, not bots
+  // Bots use the bot's presence status instead (setPresence)
   setupRichPresence() {
-    const clientId = '1359414378692087838';
-
-    const rpc = new RPC.Client({ transport: 'ipc' });
-
-    rpc.on('ready', () => {
-      console.log('Discord Rich Presence connected');
-
-      // Set the rich presence
-      rpc.setActivity({
-        details: 'Managing Zona Merah Server',
-        state: 'Players online: Checking...',
-        startTimestamp: new Date(),
-        largeImageKey: 'game_logo',
-        largeImageText: 'Zona Merah Project Z',
-        smallImageKey: 'character_icon',
-        smallImageText: 'Admin Bot',
-        instance: false,
-        buttons: [
-          { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
-          { label: 'Server Info', url: 'https://your-website.com' },
-        ],
-      });
-
-      // Update the presence every 5 minutes with server info
-      setInterval(async () => {
-        try {
-          const playersResponse = await this.wrappedRconClient.send('players');
-          const playerCount = playersResponse ? playersResponse.split('\n').filter((line) => line.trim()).length : 0;
-
-          rpc.setActivity({
-            details: 'Managing Zona Merah Server',
-            state: `Players online: ${playerCount}`,
-            startTimestamp: new Date(),
-            largeImageKey: 'game_logo',
-            largeImageText: 'Zona Merah Project Z',
-            smallImageKey: 'character_icon',
-            smallImageText: 'Admin Bot',
-            instance: false,
-            buttons: [
-              { label: 'Join Discord', url: 'https://discord.gg/your-invite' },
-              { label: 'Server Info', url: 'https://your-website.com' },
-            ],
-          });
-        } catch (error) {
-          console.error('Failed to update rich presence:', error);
-        }
-      }, 5 * 60 * 1000);
-    });
-
-    rpc.login({ clientId }).catch(console.error);
+    console.log('Rich Presence feature is disabled for bot applications.');
+    // const clientId = '1359414378692087838';
+    // const rpc = new RPC.Client({ transport: 'ipc' });
+    // ... rest of the code commented out
   }
 
   setupRconConnection(rconClient) {

@@ -65,18 +65,29 @@ async function main() {
     await discordBot.login();
     console.log('Discord bot logged in successfully.');
 
-    // Set up initial RCON connection
+    // Set up initial RCON connection (non-blocking)
     console.log('Connecting to RCON server...');
-    await rconClient.connect();
-    console.log('Connected to RCON server.');
+    try {
+      await rconClient.connect();
+      console.log('Connected to RCON server.');
+    } catch (rconError) {
+      console.error('RCON connection failed:', rconError.message);
+      console.log('Bot will continue without RCON. Auto-reconnect will attempt to connect later.');
+    }
 
     // Setup event listeners with the wrapped RCON client and auction monitor
+    // This must happen even if RCON fails, so Discord commands still work
     discordBot.setupEventListeners(rconClient, auctionLogMonitor);
 
-    // Start auction log monitoring
+    // Start auction log monitoring (non-blocking)
     console.log('Starting auction log monitoring...');
-    await auctionLogMonitor.start();
-    console.log('Auction log monitoring started successfully.');
+    try {
+      await auctionLogMonitor.start();
+      console.log('Auction log monitoring started successfully.');
+    } catch (monitorError) {
+      console.error('Auction monitor failed to start:', monitorError.message);
+      console.log('Bot will continue without auction monitoring.');
+    }
 
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
