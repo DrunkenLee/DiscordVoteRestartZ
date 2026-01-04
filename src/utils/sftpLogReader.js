@@ -146,7 +146,7 @@ export class SftpLogReader {
     return this.executeWithQueue(async () => {
       try {
         await this.connect();
-        const iniPath = `/home/pzserver/Zomboid/Lua/${filename}`;
+        const iniPath = `/home/josplay5/Zomboid/Lua/${filename}`;
         const iniContent = await this.sftp.get(iniPath);
         const lines = iniContent.toString().split('\n');
         const killCounts = [];
@@ -183,7 +183,7 @@ export class SftpLogReader {
     return this.executeWithQueue(async () => {
       try {
         await this.connect();
-        const iniPath = `/home/pzserver/Zomboid/Lua/Deposits/${username}_deposits.ini`;
+        const iniPath = `/home/josplay5/Zomboid/Lua/Deposits/${username}_deposits.ini`;
         const iniContent = await this.sftp.get(iniPath);
         const lines = iniContent.toString().split('\n');
         let total = 0;
@@ -210,7 +210,7 @@ export class SftpLogReader {
     return this.executeWithQueue(async () => {
       try {
         await this.connect();
-        const iniPath = `/home/pzserver/Zomboid/Lua/RaidDeposits/${username}_raiddeposits.ini`;
+        const iniPath = `/home/josplay5/Zomboid/Lua/RaidDeposits/${username}_raiddeposits.ini`;
         const iniContent = await this.sftp.get(iniPath);
         const lines = iniContent.toString().split('\n');
         let total = 0;
@@ -238,7 +238,7 @@ export class SftpLogReader {
       try {
         await this.connect();
 
-        const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
+        const flagsFilePath = '/home/josplay5/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
 
         // Read current file content
         let fileContent;
@@ -297,7 +297,7 @@ eventDescription=""`;
       try {
         await this.connect();
 
-        const flagsFilePath = '/home/pzserver/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
+        const flagsFilePath = '/home/josplay5/Zomboid/Lua/ZonaMerah_ServerFlags.ini';
 
         // Read current file content
         let fileContent;
@@ -358,7 +358,7 @@ eventDescription=""`;
       try {
         await this.connect();
 
-        const globalFlagsFilePath = '/home/pzserver/Zomboid/Lua/ZMData/ZM_GlobalFlags.lua';
+        const globalFlagsFilePath = '/home/josplay5/Zomboid/Lua/ZMData/ZM_GlobalFlags.lua';
 
         // Read current file content
         let fileContent;
@@ -418,7 +418,7 @@ eventDescription=""`;
       try {
         await this.connect();
 
-        const auctionLogDir = '/home/pzserver/Zomboid/Lua';
+        const auctionLogDir = '/home/josplay5/Zomboid/Lua';
         console.log(`[AuctionLogScanner] Scanning auction log directory: ${auctionLogDir}`);
 
         // List files in the directory and filter by pattern auction_data*.jsonl
@@ -516,7 +516,7 @@ eventDescription=""`;
     return this.executeWithQueue(async () => {
       try {
         await this.connect();
-        const auctionLogDir = '/home/pzserver/Zomboid/Lua';
+        const auctionLogDir = '/home/josplay5/Zomboid/Lua';
         try {
           const listing = await this.sftp.list(auctionLogDir);
           const files = listing.filter(f => f.type === '-' && f.name.startsWith('auction_data') && f.name.endsWith('.jsonl'));
@@ -584,7 +584,7 @@ eventDescription=""`;
     // so we don't need to wrap it again to avoid double-queueing
     try {
       await this.connect();
-      const auctionLogDir = '/home/pzserver/Zomboid/Lua/AuctionLog';
+      const auctionLogDir = '/home/josplay5/Zomboid/Lua/AuctionLog';
 
       // Check if directory exists
       try {
@@ -638,7 +638,7 @@ eventDescription=""`;
         // Get next sequential auction number (keep connection open)
         const auctionNumber = await this.getNextAuctionNumber(true);
         const fileName = `auction${auctionNumber}.json`;
-        const auctionLogDir = '/home/pzserver/Zomboid/Lua/AuctionLog';
+        const auctionLogDir = '/home/josplay5/Zomboid/Lua/AuctionLog';
         const filePath = `${auctionLogDir}/${fileName}`;
 
         // Ensure directory exists (create if not)
