@@ -127,7 +127,7 @@ export class SftpLogReader {
 
         return {
           success: false,
-          message: 'No mod update information found in recent logs (checked last 5000 lines)'
+          message: 'No mod update information found'
         };
 
       } catch (error) {
