@@ -76,7 +76,7 @@ export class SftpLogReader {
   async findLatestLogFile() {
     await this.connect();
     // Directly return the known log file path
-    return '/home/pzserver/Zomboid/server-console.txt';
+    return '/home/josplay5/Zomboid/server-console.txt';
   }
 
   async checkForModUpdates() {
@@ -84,7 +84,7 @@ export class SftpLogReader {
       try {
         await this.connect();
 
-        const logPath = '/home/pzserver/Zomboid/server-console.txt';
+        const logPath = '/home/josplay5/Zomboid/server-console.txt';
         console.log(`[ModUpdateChecker] Reading log file: ${logPath}`);
 
         // Read the log file - simplified approach
