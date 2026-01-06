@@ -1,4 +1,8 @@
 import { Rcon } from 'rcon-client';
+import dns from 'dns';
+
+// Force IPv4 resolution
+dns.setDefaultResultOrder('ipv4first');
 
 export class RconClient {
     constructor(host, port, password) {
@@ -13,7 +17,8 @@ export class RconClient {
             this.client = await Rcon.connect({
                 host: this.host,
                 port: this.port,
-                password: this.password
+                password: this.password,
+                timeout: 10000 // 10 second timeout
             });
 
             console.log(`Connected to RCON at ${this.host}:${this.port}`);
@@ -41,7 +46,19 @@ export class RconClient {
             return await this.client.send(command);
         } catch (error) {
             console.error(`Error sending command ${command}:`, error);
+            // If connection error, clear the client reference
+            if (error.message.includes('ECONNRESET') ||
+                error.message.includes('EPIPE') ||
+                error.message.includes('Connection') ||
+                error.message.includes('Socket')) {
+                console.log('Connection lost, clearing client reference');
+                this.client = null;
+            }
             throw error;
         }
+    }
+
+    isConnected() {
+        return this.client !== null;
     }
 }

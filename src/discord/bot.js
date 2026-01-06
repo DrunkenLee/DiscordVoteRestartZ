@@ -153,12 +153,22 @@ export class DiscordBot {
     // Set up a new heartbeat interval
     this.rconHeartbeatInterval = setInterval(async () => {
       try {
-        console.log('Sending RCON heartbeat... );');
-        await this.sendRconCommand('players');
-        console.log('RCON heartbeat successful');
+        console.log('Sending RCON heartbeat...');
+
+        // Check if client is connected before sending
+        if (!this.rconClient || !this.rconClient.client) {
+          console.log('RCON client not connected during heartbeat, attempting reconnect...');
+          await this.reconnectRcon();
+        } else {
+          await this.sendRconCommand('players');
+          console.log('RCON heartbeat successful');
+        }
       } catch (error) {
         console.error(`RCON heartbeat failed: ${error.message}`);
-        this.reconnectRcon().catch((e) => console.error(`Failed to reconnect: ${e.message}`));
+        // Don't spam reconnection attempts
+        if (!this.isReconnecting) {
+          this.reconnectRcon().catch((e) => console.error(`Failed to reconnect: ${e.message}`));
+        }
       }
     }, this.heartbeatIntervalTime);
 
@@ -172,6 +182,12 @@ export class DiscordBot {
   async sendRconCommand(command) {
     if (!this.rconClient) {
       throw new Error('RCON client not initialized');
+    }
+
+    // Check if client is connected, if not try to reconnect
+    if (!this.rconClient.client) {
+      console.log('RCON client not connected, attempting to reconnect...');
+      await this.reconnectRcon();
     }
 
     return this.rconClient.send(command);
@@ -188,19 +204,21 @@ export class DiscordBot {
     try {
       console.log('Attempting to reconnect to RCON server...');
 
-      // This assumes your RCON client has a connect or reconnect method
-      // Adjust this based on your actual RCON client implementation
-      if (typeof this.rconClient.connect === 'function') {
-        await this.rconClient.connect();
-      } else if (typeof this.rconClient.reconnect === 'function') {
-        await this.rconClient.reconnect();
-      } else {
-        // If no explicit reconnect method, you might need to recreate the client
-        // This would require more context on how your RCON client is created
-        throw new Error('No reconnect method available on RCON client');
+      // First, disconnect if there's an existing connection
+      if (this.rconClient.client) {
+        try {
+          await this.rconClient.disconnect();
+        } catch (e) {
+          console.log('Error disconnecting old RCON client:', e.message);
+        }
       }
 
+      // Reconnect to RCON
+      await this.rconClient.connect();
       console.log('Successfully reconnected to RCON server');
+    } catch (error) {
+      console.error('Failed to reconnect to RCON:', error.message);
+      throw error;
     } finally {
       this.isReconnecting = false;
     }
