@@ -18,6 +18,7 @@ export class SftpLogReader {
         port: config.sftp.port,
         username: config.sftp.username,
         password: config.sftp.password,
+        readyTimeout: 10000, // 10 second timeout for connection
         // If using key-based authentication:
         // privateKey: config.sftp.privateKey
       });

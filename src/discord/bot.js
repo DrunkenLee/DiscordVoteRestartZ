@@ -500,16 +500,25 @@ export class DiscordBot {
       } else if (command === 'checkupdate') {
         try {
           const statusMsg = await message.channel.send('Checking for mod updates, please wait while im reading the log...');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
 
-          const result = await this.sftpLogReader.checkForModUpdates();
+          // Send the check command once and wait a bit for the server to write to log
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await wrappedRconClient.send('checkModsNeedUpdate');
+          await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+
+          // Add timeout to prevent hanging
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Mod update check timed out after 30 seconds')), 30000)
+          );
+
+          const result = await Promise.race([
+            this.sftpLogReader.checkForModUpdates(),
+            timeoutPromise
+          ]);
           // console.log(JSON.stringify(result, null, 2));
 
           if (result && result.success) {
@@ -570,7 +579,7 @@ export class DiscordBot {
             await statusMsg.edit(`Mod update check result: **${result.message || 'Unknown error'}**`);
           }
         } catch (err) {
-          message.channel.send(`Error checking mod updates: ${err.message}`);
+          await statusMsg.edit(`❌ Error checking mod updates: ${err.message}`);
           console.error('Error in !checkupdate:', err);
         }
       } else if (command === 'killboard') {
