@@ -14,6 +14,8 @@ export class RconClient {
 
     async connect() {
         try {
+            console.log(`[RCON Client] Connecting to ${this.host}:${this.port}...`);
+
             this.client = await Rcon.connect({
                 host: this.host,
                 port: this.port,
@@ -24,7 +26,8 @@ export class RconClient {
             console.log(`Connected to RCON at ${this.host}:${this.port}`);
             return this.client;
         } catch (error) {
-            console.error('RCON connection error:', error);
+            console.error('RCON connection error:', error.message);
+            this.client = null;
             throw error;
         }
     }

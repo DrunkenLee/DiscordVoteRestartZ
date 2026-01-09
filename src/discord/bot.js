@@ -39,7 +39,7 @@ export class DiscordBot {
     // RCON connection management
     this.rconClient = null;
     this.rconHeartbeatInterval = null;
-    this.heartbeatIntervalTime = 5 * 60 * 1000; // 5 minutes
+    this.heartbeatIntervalTime = 2 * 60 * 1000; // 2 minutes (reduced from 5 to keep connection alive)
     this.isReconnecting = false;
 
     // Add this for cooldown tracking
@@ -116,9 +116,12 @@ export class DiscordBot {
     return {
       send: async (command) => {
         try {
-          return await this.sendRconCommand(command);
+          console.log(`[RCON Wrapper] Sending command: "${command}"`);
+          const result = await this.sendRconCommand(command);
+          console.log(`[RCON Wrapper] Command result:`, result ? result.substring(0, 200) : '(empty)');
+          return result;
         } catch (error) {
-          console.error(`RCON command failed: ${error.message}`);
+          console.error(`[RCON Wrapper] Command failed: ${error.message}`);
 
           // Try to reconnect and retry the command once
           if (
@@ -153,21 +156,22 @@ export class DiscordBot {
     // Set up a new heartbeat interval
     this.rconHeartbeatInterval = setInterval(async () => {
       try {
-        console.log('Sending RCON heartbeat...');
+        const currentTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+        console.log(`[RCON Heartbeat] Checking connection at ${currentTime}...`);
 
         // Check if client is connected before sending
         if (!this.rconClient || !this.rconClient.client) {
-          console.log('RCON client not connected during heartbeat, attempting reconnect...');
+          console.log('[RCON Heartbeat] Client not connected, attempting reconnect...');
           await this.reconnectRcon();
         } else {
           await this.sendRconCommand('players');
-          console.log('RCON heartbeat successful');
+          console.log('[RCON Heartbeat] ✓ Connection healthy');
         }
       } catch (error) {
-        console.error(`RCON heartbeat failed: ${error.message}`);
+        console.error(`[RCON Heartbeat] Failed: ${error.message}`);
         // Don't spam reconnection attempts
         if (!this.isReconnecting) {
-          this.reconnectRcon().catch((e) => console.error(`Failed to reconnect: ${e.message}`));
+          this.reconnectRcon().catch((e) => console.error(`[RCON Heartbeat] Reconnect failed: ${e.message}`));
         }
       }
     }, this.heartbeatIntervalTime);
@@ -186,38 +190,59 @@ export class DiscordBot {
 
     // Check if client is connected, if not try to reconnect
     if (!this.rconClient.client) {
-      console.log('RCON client not connected, attempting to reconnect...');
+      console.log('[RCON] Client not connected, attempting to reconnect...');
       await this.reconnectRcon();
     }
 
-    return this.rconClient.send(command);
+    // Validate connection is actually working
+    try {
+      return await this.rconClient.send(command);
+    } catch (error) {
+      console.error('[RCON] Command failed, will attempt reconnect:', error.message);
+      // Try one reconnect attempt
+      await this.reconnectRcon();
+      // Retry the command
+      return await this.rconClient.send(command);
+    }
   }
 
   async reconnectRcon() {
     if (this.isReconnecting) {
-      console.log('Reconnection already in progress, skipping...');
-      return;
+      console.log('[RCON] Reconnection already in progress, waiting...');
+      // Wait for the current reconnection to finish
+      let attempts = 0;
+      while (this.isReconnecting && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      if (this.isReconnecting) {
+        throw new Error('Reconnection timeout - another reconnection is stuck');
+      }
+      return; // Reconnection completed by another process
     }
 
     this.isReconnecting = true;
 
     try {
-      console.log('Attempting to reconnect to RCON server...');
+      console.log('[RCON] Attempting to reconnect to RCON server...');
 
       // First, disconnect if there's an existing connection
-      if (this.rconClient.client) {
+      if (this.rconClient && this.rconClient.client) {
         try {
           await this.rconClient.disconnect();
         } catch (e) {
-          console.log('Error disconnecting old RCON client:', e.message);
+          console.log('[RCON] Error disconnecting old client:', e.message);
         }
       }
 
-      // Reconnect to RCON
+      // Wait a moment before reconnecting
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Reconnect
       await this.rconClient.connect();
-      console.log('Successfully reconnected to RCON server');
+      console.log('[RCON] Successfully reconnected to RCON server');
     } catch (error) {
-      console.error('Failed to reconnect to RCON:', error.message);
+      console.error('[RCON] Failed to reconnect:', error.message);
       throw error;
     } finally {
       this.isReconnecting = false;
@@ -498,19 +523,55 @@ export class DiscordBot {
           console.error('Error during restart command:', error);
         }
       } else if (command === 'checkupdate') {
+        let statusMsg;
         try {
-          const statusMsg = await message.channel.send('Checking for mod updates, please wait while im reading the log...');
+          console.log('[CheckUpdate] Command initiated by user:', message.author.tag);
+          statusMsg = await message.channel.send('Checking for mod updates, please wait while im reading the log...');
+
+          // Validate RCON connection before sending commands
+          console.log('[CheckUpdate] Validating RCON connection...');
+          if (!this.rconClient || !this.rconClient.client) {
+            console.log('[CheckUpdate] RCON not connected, attempting reconnect...');
+            try {
+              await this.reconnectRcon();
+              console.log('[CheckUpdate] RCON reconnected successfully');
+            } catch (reconnectError) {
+              console.error('[CheckUpdate] Failed to reconnect RCON:', reconnectError.message);
+              await statusMsg.edit('⚠️ Warning: Could not connect to RCON, but will check logs anyway...');
+              // Continue with log check even if RCON fails
+            }
+          }
 
           // Send the check command once and wait a bit for the server to write to log
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await wrappedRconClient.send('checkModsNeedUpdate');
-          await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+          console.log('[CheckUpdate] Sending checkModsNeedUpdate command to server...');
+          try {
+            console.log('[CheckUpdate] Attempt 1/3...');
+            const response1 = await wrappedRconClient.send('checkModsNeedUpdate');
+            console.log('[CheckUpdate] Response 1:', response1);
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            console.log('[CheckUpdate] Attempt 2/3...');
+            const response2 = await wrappedRconClient.send('checkModsNeedUpdate');
+            console.log('[CheckUpdate] Response 2:', response2);
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            console.log('[CheckUpdate] Attempt 3/3...');
+            const response3 = await wrappedRconClient.send('checkModsNeedUpdate');
+            console.log('[CheckUpdate] Response 3:', response3);
+
+            console.log('[CheckUpdate] All commands sent successfully');
+          } catch (rconError) {
+            console.error('[CheckUpdate] RCON send failed:', rconError.message);
+            console.error('[CheckUpdate] Full RCON error:', rconError);
+            await statusMsg.edit('⚠️ Warning: Could not send RCON command, but will check logs anyway...');
+          }
+          console.log('[CheckUpdate] Waiting 3 seconds for log to update...');
+          await new Promise((resolve) => setTimeout(resolve, 3000)); // Wait 3 seconds
 
           // Add timeout to prevent hanging
+          console.log('[CheckUpdate] Starting SFTP log scan with 30s timeout...');
           const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Mod update check timed out after 30 seconds')), 30000)
           );
@@ -519,11 +580,13 @@ export class DiscordBot {
             this.sftpLogReader.checkForModUpdates(),
             timeoutPromise
           ]);
-          // console.log(JSON.stringify(result, null, 2));
+          console.log('[CheckUpdate] SFTP scan completed. Result:', JSON.stringify(result, null, 2));
 
           if (result && result.success) {
+            console.log('[CheckUpdate] Success! needsUpdate:', result.needsUpdate);
             await statusMsg.edit(`Mod update check result: **${result.message}**`);
             if (result?.needsUpdate) {
+              console.log('[CheckUpdate] Mod update detected! Initiating restart sequence...');
               await message.channel.send('Mod update detected! Restarting server...');
               try {
                 // First warning via RCON
@@ -576,11 +639,22 @@ export class DiscordBot {
               }
             }
           } else {
+            console.log('[CheckUpdate] Check failed or unsuccessful. Result:', result);
             await statusMsg.edit(`Mod update check result: **${result.message || 'Unknown error'}**`);
           }
         } catch (err) {
-          await statusMsg.edit(`❌ Error checking mod updates: ${err.message}`);
-          console.error('Error in !checkupdate:', err);
+          console.error('[CheckUpdate] ERROR in !checkupdate:', err);
+          console.error('Full error details:', err);
+          if (statusMsg) {
+            try {
+              await statusMsg.edit(`❌ Error checking mod updates: ${err.message}`);
+            } catch (editError) {
+              console.error('[CheckUpdate] Failed to edit status message:', editError);
+              await message.channel.send(`❌ Error checking mod updates: ${err.message}`);
+            }
+          } else {
+            await message.channel.send(`❌ Error checking mod updates: ${err.message}`);
+          }
         }
       } else if (command === 'killboard') {
         try {

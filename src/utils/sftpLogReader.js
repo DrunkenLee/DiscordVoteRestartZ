@@ -81,9 +81,12 @@ export class SftpLogReader {
   }
 
   async checkForModUpdates() {
+    console.log('[ModUpdateChecker] === Starting mod update check ===');
     return this.executeWithQueue(async () => {
       try {
+        console.log('[ModUpdateChecker] Connecting to SFTP...');
         await this.connect();
+        console.log('[ModUpdateChecker] SFTP connected successfully');
 
         const logPath = '/home/josplay5/Zomboid/server-console.txt';
         console.log(`[ModUpdateChecker] Reading log file: ${logPath}`);
@@ -92,8 +95,10 @@ export class SftpLogReader {
         let logContent;
         try {
           logContent = await this.sftp.get(logPath);
+          console.log('[ModUpdateChecker] Log file read successfully, size:', logContent.length, 'bytes');
         } catch (getError) {
           console.error('[ModUpdateChecker] Failed to read log file:', getError.message);
+          console.error('[ModUpdateChecker] Full error:', getError);
           return {
             success: false,
             message: `Unable to read server log: ${getError.message}`
@@ -104,41 +109,66 @@ export class SftpLogReader {
         const lines = logContent.toString('utf8').split('\n');
         const lastLines = lines.slice(-5000);
 
-        console.log(`[ModUpdateChecker] Scanning ${lastLines.length} recent log lines...`);
+        console.log(`[ModUpdateChecker] Total lines in log: ${lines.length}`);
+        console.log(`[ModUpdateChecker] Scanning last ${lastLines.length} lines...`);
+        console.log(`[ModUpdateChecker] Last 3 lines for reference:`);
+        console.log(lastLines.slice(-3).map((l, i) => `  [${lastLines.length - 3 + i}]: ${l.substring(0, 100)}`).join('\n'));
 
         // Look for mod update messages in the recent lines
+        let linesChecked = 0;
         for (let i = lastLines.length - 1; i >= 0; i--) {
           const line = lastLines[i];
-          if (line.includes('CheckModsNeedUpdate: Mods updated')) {
-            console.log('[ModUpdateChecker] Found: Mods are up to date');
-            return {
-              success: true,
-              needsUpdate: false,
-              message: 'Mods are up to date',
-            };
-          } else if (line.includes('Mods need update')) {
-            console.log('[ModUpdateChecker] Found: Mods need updates');
-            return {
-              success: true,
-              needsUpdate: true,
-              message: 'Mods need updates',
-            };
+          const lineLower = line.toLowerCase();
+          linesChecked++;
+
+          // Check if line contains CheckModsNeedUpdate command output
+          if (lineLower.includes('checkmodsneedupdate:')) {
+            console.log(`[ModUpdateChecker] Found CheckModsNeedUpdate output at line ${i}:`);
+            console.log(`[ModUpdateChecker]   Original: ${line}`);
+            console.log(`[ModUpdateChecker]   Lowercase: ${lineLower}`);
+
+            // Check for "Mods need update" (indicates updates available)
+            if (lineLower.includes('mods need update')) {
+              console.log('[ModUpdateChecker] ✓ Match found: Mods need updates');
+              console.log(`[ModUpdateChecker] Lines checked before match: ${linesChecked}`);
+              return {
+                success: true,
+                needsUpdate: true,
+                message: 'Mods need updates',
+              };
+            }
+            // Check for "Mods updated" (indicates mods are up to date)
+            else if (lineLower.includes('mods updated')) {
+              console.log('[ModUpdateChecker] ✓ Match found: Mods are up to date');
+              console.log(`[ModUpdateChecker] Lines checked before match: ${linesChecked}`);
+              return {
+                success: true,
+                needsUpdate: false,
+                message: 'Mods are up to date',
+              };
+            }
           }
         }
 
+        console.log(`[ModUpdateChecker] No match found after checking ${linesChecked} lines`);
+
+        console.log('[ModUpdateChecker] Returning: No mod update information found');
         return {
           success: false,
           message: 'No mod update information found'
         };
 
       } catch (error) {
-        console.error('[ModUpdateChecker] Error checking for mod updates:', error);
+        console.error('[ModUpdateChecker] ERROR in checkForModUpdates:', error);
+        console.error('[ModUpdateChecker] Error stack:', error.stack);
         return {
           success: false,
           message: `Error: ${error.message}`
         };
       } finally {
+        console.log('[ModUpdateChecker] Disconnecting from SFTP...');
         await this.disconnect();
+        console.log('[ModUpdateChecker] === Mod update check complete ===');
       }
     });
   }
