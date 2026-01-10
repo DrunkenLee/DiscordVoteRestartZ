@@ -115,20 +115,24 @@ export class SftpLogReader {
         console.log(lastLines.slice(-3).map((l, i) => `  [${lastLines.length - 3 + i}]: ${l.substring(0, 100)}`).join('\n'));
 
         // Look for mod update messages in the recent lines
+        // Format: LOG  : Mod          f:47602, t:1767949050971, st:68,411,210> CheckModsNeedUpdate: Mods need update
         let linesChecked = 0;
         for (let i = lastLines.length - 1; i >= 0; i--) {
           const line = lastLines[i];
-          const lineLower = line.toLowerCase();
           linesChecked++;
 
           // Check if line contains CheckModsNeedUpdate command output
-          if (lineLower.includes('checkmodsneedupdate:')) {
+          // Use regex to match the pattern more flexibly
+          const modUpdateMatch = line.match(/CheckModsNeedUpdate: Mods need update:\s*(.+)/i);
+
+          if (modUpdateMatch) {
+            const status = modUpdateMatch[1].trim();
             console.log(`[ModUpdateChecker] Found CheckModsNeedUpdate output at line ${i}:`);
             console.log(`[ModUpdateChecker]   Original: ${line}`);
-            console.log(`[ModUpdateChecker]   Lowercase: ${lineLower}`);
+            console.log(`[ModUpdateChecker]   Status: ${status}`);
 
             // Check for "Mods need update" (indicates updates available)
-            if (lineLower.includes('mods need update')) {
+            if (/mods\s+need\s+update/i.test(status)) {
               console.log('[ModUpdateChecker] ✓ Match found: Mods need updates');
               console.log(`[ModUpdateChecker] Lines checked before match: ${linesChecked}`);
               return {
@@ -138,7 +142,7 @@ export class SftpLogReader {
               };
             }
             // Check for "Mods updated" (indicates mods are up to date)
-            else if (lineLower.includes('mods updated')) {
+            else if (/mods\s+updated/i.test(status)) {
               console.log('[ModUpdateChecker] ✓ Match found: Mods are up to date');
               console.log(`[ModUpdateChecker] Lines checked before match: ${linesChecked}`);
               return {
