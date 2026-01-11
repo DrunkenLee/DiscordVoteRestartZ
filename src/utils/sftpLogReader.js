@@ -76,8 +76,32 @@ export class SftpLogReader {
 
   async findLatestLogFile() {
     await this.connect();
-    // Directly return the known log file path
-    return '/home/josplay5/Zomboid/server-console.txt';
+    const logDir = '/home/josplay5/Zomboid/Logs';
+
+    try {
+      // List all files in the Logs directory
+      const listing = await this.sftp.list(logDir);
+
+      // Find files matching the pattern *_DebugLog-server.txt
+      const debugLogFiles = listing.filter(file =>
+        file.type === '-' && file.name.endsWith('_DebugLog-server.txt')
+      );
+
+      if (debugLogFiles.length === 0) {
+        throw new Error('No *_DebugLog-server.txt files found in Logs directory');
+      }
+
+      // Sort by modification time (newest first) and return the latest one
+      debugLogFiles.sort((a, b) => (b.modifyTime || 0) - (a.modifyTime || 0));
+      const latestFile = debugLogFiles[0];
+
+      console.log(`[LogReader] Found debug log file: ${latestFile.name}`);
+      return `${logDir}/${latestFile.name}`;
+
+    } catch (error) {
+      console.error('[LogReader] Error finding debug log file:', error);
+      throw error;
+    }
   }
 
   async checkForModUpdates() {
@@ -88,7 +112,7 @@ export class SftpLogReader {
         await this.connect();
         console.log('[ModUpdateChecker] SFTP connected successfully');
 
-        const logPath = '/home/josplay5/Zomboid/server-console.txt';
+        const logPath = await this.findLatestLogFile();
         console.log(`[ModUpdateChecker] Reading log file: ${logPath}`);
 
         // Read the log file - simplified approach
@@ -101,7 +125,7 @@ export class SftpLogReader {
           console.error('[ModUpdateChecker] Full error:', getError);
           return {
             success: false,
-            message: `Unable to read server log: ${getError.message}`
+            message: `Unable to read server update, please try again in a few seconds.`
           };
         }
 
@@ -110,29 +134,34 @@ export class SftpLogReader {
         const lastLines = lines.slice(-5000);
 
         console.log(`[ModUpdateChecker] Total lines in log: ${lines.length}`);
-        console.log(`[ModUpdateChecker] Scanning last ${lastLines.length} lines...`);
-        console.log(`[ModUpdateChecker] Last 3 lines for reference:`);
-        console.log(lastLines.slice(-3).map((l, i) => `  [${lastLines.length - 3 + i}]: ${l.substring(0, 100)}`).join('\n'));
+        console.log(`[ModUpdateChecker] File size: ${logContent.length} bytes`);
+        console.log(`[ModUpdateChecker] Using last ${lastLines.length} lines for scanning`);
+        console.log(`[ModUpdateChecker] Line range: ${lines.length - lastLines.length} to ${lines.length - 1}`);
+        console.log(`[ModUpdateChecker] Showing ACTUAL LAST 50 lines from the file:`);
+        console.log('=' .repeat(80));
+        // Show the actual last 50 lines from the file (newest content)
+        const startIdx = Math.max(0, lines.length - 50);
+        for (let i = startIdx; i < lines.length; i++) {
+          console.log(`[Line ${i}]: ${lines[i]}`);
+        }
+        console.log('=' .repeat(80));
+        console.log(`[ModUpdateChecker] NOW SCANNING FROM NEWEST (line ${lines.length - 1}) TO OLDEST...`);
 
         // Look for mod update messages in the recent lines
         // Format: LOG  : Mod          f:47602, t:1767949050971, st:68,411,210> CheckModsNeedUpdate: Mods need update
         let linesChecked = 0;
-        for (let i = lastLines.length - 1; i >= 0; i--) {
+        // Read from newest to oldest (descending)
+        for (let i = lastLines.length - 1; i >= Math.max(0, lastLines.length - 5000); i--) {
           const line = lastLines[i];
           linesChecked++;
 
-          // Check if line contains CheckModsNeedUpdate command output
-          // Use regex to match the pattern more flexibly
-          const modUpdateMatch = line.match(/CheckModsNeedUpdate: Mods need update:\s*(.+)/i);
-
-          if (modUpdateMatch) {
-            const status = modUpdateMatch[1].trim();
-            console.log(`[ModUpdateChecker] Found CheckModsNeedUpdate output at line ${i}:`);
-            console.log(`[ModUpdateChecker]   Original: ${line}`);
-            console.log(`[ModUpdateChecker]   Status: ${status}`);
+          // Check if line contains CheckModsNeedUpdate command
+          if (line.includes('CheckModsNeedUpdate')) {
+            console.log(`[ModUpdateChecker] >>> Found CheckModsNeedUpdate at line ${i}:`);
+            console.log(`[ModUpdateChecker] >>> Full line: ${line}`);
 
             // Check for "Mods need update" (indicates updates available)
-            if (/mods\s+need\s+update/i.test(status)) {
+            if (/mods\s+need\s+update/i.test(line)) {
               console.log('[ModUpdateChecker] ✓ Match found: Mods need updates');
               console.log(`[ModUpdateChecker] Lines checked before match: ${linesChecked}`);
               return {
@@ -142,7 +171,7 @@ export class SftpLogReader {
               };
             }
             // Check for "Mods updated" (indicates mods are up to date)
-            else if (/mods\s+updated/i.test(status)) {
+            else if (/mods\s+updated/i.test(line)) {
               console.log('[ModUpdateChecker] ✓ Match found: Mods are up to date');
               console.log(`[ModUpdateChecker] Lines checked before match: ${linesChecked}`);
               return {
@@ -150,6 +179,8 @@ export class SftpLogReader {
                 needsUpdate: false,
                 message: 'Mods are up to date',
               };
+            } else {
+              console.log('[ModUpdateChecker] ⚠ CheckModsNeedUpdate found but no status match');
             }
           }
         }
