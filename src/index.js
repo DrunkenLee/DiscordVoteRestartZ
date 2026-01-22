@@ -55,8 +55,13 @@ async function main() {
 
     // Then, connect to database
     console.log('Connecting to database...');
-    await sequelize.authenticate();
-    console.log('Database connected successfully.');
+    try {
+      await sequelize.authenticate();
+      console.log('Database connected successfully.');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError.message);
+      console.log('Bot will continue without database. Some features may be limited.');
+    }
 
     // continue with Discord/RCON init when not API_ONLY
 
