@@ -10,13 +10,13 @@ const router = express.Router();
 /**
  * POST /map/sync
  * Downloads a tar.gz produced on the game server and extracts into public/pzmap
- * Expected on server: /home/josplay5/pzmap-output.tar.gz
+ * Expected on server: /home/pzserver/pzmap-output.tar.gz
  */
 router.post('/sync', async (req, res) => {
   const tmpDir = path.resolve(process.cwd(), 'tmp', 'pzmap');
   const outDir = path.resolve(process.cwd(), 'public', 'pzmap');
 
-  const remoteTar = req.body.remotePath || '/home/josplay5/pzmap-output.tar.gz';
+  const remoteTar = req.body.remotePath || '/home/pzserver/pzmap-output.tar.gz';
 
   const sftp = new SftpLogReader();
 

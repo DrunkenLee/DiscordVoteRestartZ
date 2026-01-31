@@ -2492,7 +2492,7 @@ export class DiscordBot {
 
       // 2. Remote SFTP fallback (server authoritative) - only if local not found
       debug.push('attempt-remote');
-      const remoteDir = '/home/josplay5/Zomboid/Lua/Serverpoints';
+      const remoteDir = '/home/pzserver/Zomboid/Lua/Serverpoints';
       const remoteFilePath = `${remoteDir}/${normalizedUsername}.points.txt`;
       try {
         await this.sftpLogReader.connect();
@@ -2567,7 +2567,7 @@ export class DiscordBot {
    * If found, parse and send Discord notification, then delete the file
    */
   async checkVehicleRemovalNotification() {
-    const remoteFilePath = config.get('autoshop.remoteFilePath') || '/home/josplay5/Zomboid/Lua/ZM_Autoshop_VehicleRemoval.json';
+    const remoteFilePath = config.get('autoshop.remoteFilePath') || '/home/pzserver/Zomboid/Lua/ZM_Autoshop_VehicleRemoval.json';
 
     try {
       await this.sftpLogReader.connect();

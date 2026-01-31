@@ -31,7 +31,7 @@ const config = {
   },
   autoshop: {
     checkIntervalMinutes: parseInt(process.env.AUTOSHOP_CHECK_INTERVAL) || 1,
-    remoteFilePath: process.env.AUTOSHOP_REMOTE_FILE_PATH || "/home/josplay5/Zomboid/Lua/ZM_Autoshop_VehicleRemoval.json"
+    remoteFilePath: process.env.AUTOSHOP_REMOTE_FILE_PATH || "/home/pzserver/Zomboid/Lua/ZM_Autoshop_VehicleRemoval.json"
   },
   battlemetrics: {
     apiKey: process.env.BATTLEMETRICS_API_KEY || "",
