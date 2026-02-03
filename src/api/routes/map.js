@@ -1,7 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs-extra';
-import tar from 'tar';
+import * as tar from 'tar';
 import { SftpLogReader } from '../../utils/sftpLogReader.js';
 import config from '../../config/config.js';
 
