@@ -58,7 +58,14 @@ export class DiscordBot {
       tankFlags: null,
       supplyRunSuccess: false,
       tankFlagsSuccess: false,
+      vehicleRemoval: null,
+      vehicleRemovalSuccess: null,
+      scheduledRestartWarning: null,
+      scheduledRestartWarningSuccess: null,
+      scheduledRestart: null,
+      scheduledRestartSuccess: null,
     };
+    this.isScheduledRestartRunning = false;
 
     // Add lua command manager
     this.luaCommandManager = new BotLuaCommandManager();
@@ -246,6 +253,77 @@ export class DiscordBot {
       throw error;
     } finally {
       this.isReconnecting = false;
+    }
+  }
+
+  async runSshCommand(command) {
+    const sshConfig = {
+      host: process.env.OVH_SG_HOST,
+      port: process.env.OVH_SG_PORT_SSH,
+      username: process.env.OVH_SG_USERNAME,
+      password: process.env.OVH_SG_PASSWORD,
+    };
+
+    const conn = new SSHClient();
+    await new Promise((resolve, reject) => {
+      conn
+        .on('ready', () => {
+          conn.exec(command, (err, stream) => {
+            if (err) {
+              conn.end();
+              return reject(err);
+            }
+
+            stream.on('close', () => {
+              conn.end();
+              resolve();
+            });
+            stream.on('data', () => {});
+            stream.stderr.on('data', () => {});
+          });
+        })
+        .on('error', reject)
+        .connect(sshConfig);
+    });
+  }
+
+  async sendScheduledServerMessage(message) {
+    if (!this.wrappedRconClient) {
+      throw new Error('RCON wrapper not initialized');
+    }
+    await this.wrappedRconClient.send(`servermsg "${message}"`);
+  }
+
+  async runScheduledRestartCron() {
+    const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+
+    if (this.isScheduledRestartRunning) {
+      logger.warn(`[Cron] Scheduled restart skipped at ${executionTime}: restart already in progress.`);
+      return;
+    }
+
+    this.isScheduledRestartRunning = true;
+
+    try {
+      try {
+        await this.sendScheduledServerMessage('SERVER RESTART: Scheduled restart is starting now. Please reconnect shortly.');
+      } catch (noticeError) {
+        logger.error(`[Cron] Failed to send scheduled restart notice at ${executionTime}: ${noticeError.message}`);
+      }
+
+      await this.runSshCommand('./pzserver restart');
+      this.lastRestartTime = Date.now();
+      this.lastCronExecution.scheduledRestart = new Date();
+      this.lastCronExecution.scheduledRestartSuccess = true;
+      logger.info(`[Cron] Scheduled restart command sent at ${executionTime}`);
+      await this.sendCronNotification('Scheduled Restart', true, executionTime);
+    } catch (error) {
+      this.lastCronExecution.scheduledRestart = new Date();
+      this.lastCronExecution.scheduledRestartSuccess = false;
+      logger.error(`[Cron] Scheduled restart failed at ${executionTime}: ${error.message}`);
+      await this.sendCronNotification('Scheduled Restart', false, executionTime, error.message);
+    } finally {
+      this.isScheduledRestartRunning = false;
     }
   }
 
@@ -831,40 +909,49 @@ export class DiscordBot {
       } else if (command === 'cronstatus') {
         // Check if user has admin or developer role
         if (!isDeveloper && !isAdmin) {
-          return message.channel.send('❌ You need the @developer or @admin role to check cron job status.');
+          return message.channel.send('You need the @developer or @admin role to check cron job status.');
         }
 
         const now = new Date();
         const wibTime = now.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
 
-        let statusMessage = `**🕰️ Cron Job Status Report**\n`;
+        let statusMessage = `**Cron Job Status Report**\n`;
         statusMessage += `**Current Time (WIB):** ${wibTime}\n\n`;
 
-        // Supply Run Status
-        if (this.lastCronExecution.supplyRun) {
-          const lastSupplyRun = this.lastCronExecution.supplyRun.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
-          const supplyStatus = this.lastCronExecution.supplyRunSuccess ? '✅ SUCCESS' : '❌ FAILED';
-          statusMessage += `**Supply Run Reset:**\n`;
-          statusMessage += `└ Last Execution: ${lastSupplyRun}\n`;
-          statusMessage += `└ Status: ${supplyStatus}\n\n`;
-        } else {
-          statusMessage += `**Supply Run Reset:**\n`;
-          statusMessage += `└ Status: ⏳ Not executed yet today\n\n`;
+        const activeCronJobs = [
+          {
+            name: 'Vehicle Removal Checker',
+            schedule: `Every ${config.get('autoshop.checkIntervalMinutes') || 1} minute(s)`,
+            lastRun: this.lastCronExecution.vehicleRemoval,
+            success: this.lastCronExecution.vehicleRemovalSuccess,
+          },
+          {
+            name: 'Scheduled Restart Warning',
+            schedule: '03:59, 11:59, 17:59, 20:59 WIB',
+            lastRun: this.lastCronExecution.scheduledRestartWarning,
+            success: this.lastCronExecution.scheduledRestartWarningSuccess,
+          },
+          {
+            name: 'Scheduled Server Restart',
+            schedule: '04:00, 12:00, 18:00, 21:00 WIB',
+            lastRun: this.lastCronExecution.scheduledRestart,
+            success: this.lastCronExecution.scheduledRestartSuccess,
+          },
+        ];
+
+        for (const job of activeCronJobs) {
+          statusMessage += `**${job.name}:**\n`;
+          statusMessage += `- Schedule: ${job.schedule}\n`;
+
+          if (job.lastRun) {
+            const lastRunWib = job.lastRun.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+            statusMessage += `- Last Execution: ${lastRunWib}\n`;
+            statusMessage += `- Last Status: ${job.success ? 'SUCCESS' : 'FAILED'}\n\n`;
+          } else {
+            statusMessage += `- Last Status: Not executed since bot started\n\n`;
+          }
         }
 
-        // global flags Status
-        if (this.lastCronExecution.tankFlags) {
-          const lastTankFlags = this.lastCronExecution.tankFlags.toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
-          const tankStatus = this.lastCronExecution.tankFlagsSuccess ? '✅ SUCCESS' : '❌ FAILED';
-          statusMessage += `**global flags Reset:**\n`;
-          statusMessage += `└ Last Execution: ${lastTankFlags}\n`;
-          statusMessage += `└ Status: ${tankStatus}\n\n`;
-        } else {
-          statusMessage += `**global flags Reset:**\n`;
-          statusMessage += `└ Status: ⏳ Not executed yet today\n\n`;
-        }
-
-        statusMessage += `**Next Scheduled Execution:** Supply run at 12:01 PM WIB, global flags at 12:02 PM WIB\n`;
         statusMessage += `**Timezone:** Asia/Jakarta (UTC+7)`;
 
         message.channel.send(statusMessage);
@@ -1974,6 +2061,8 @@ export class DiscordBot {
     // Vehicle removal notification checker - runs every N minutes (configurable)
     const autoshopInterval = config.get('autoshop.checkIntervalMinutes') || 1;
     const cronExpression = `*/${autoshopInterval} * * * *`;
+    const scheduledRestartWarningExpression = '59 3,11,17,20 * * *';
+    const scheduledRestartExpression = '0 4,12,18,21 * * *';
 
     cron.schedule(
       cronExpression,
@@ -1981,7 +2070,11 @@ export class DiscordBot {
         const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
         try {
           await this.checkVehicleRemovalNotification();
+          this.lastCronExecution.vehicleRemoval = new Date();
+          this.lastCronExecution.vehicleRemovalSuccess = true;
         } catch (error) {
+          this.lastCronExecution.vehicleRemoval = new Date();
+          this.lastCronExecution.vehicleRemovalSuccess = false;
           logger.error(`[Cron] Vehicle removal check failed at ${executionTime}: ${error.message}`);
         }
       },
@@ -1992,6 +2085,48 @@ export class DiscordBot {
 
     console.log('📅 Cron jobs scheduled:');
     console.log(`   - Vehicle removal notification checker every ${autoshopInterval} minute(s)`);
+
+    cron.schedule(
+      scheduledRestartWarningExpression,
+      async () => {
+        const executionTime = new Date().toLocaleString('en-US', { timeZone: 'Asia/Jakarta' });
+        const restartTime = new Date(Date.now() + 60 * 1000).toLocaleTimeString('en-US', {
+          timeZone: 'Asia/Jakarta',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+
+        try {
+          await this.sendScheduledServerMessage(
+            `SERVER NOTICE: Scheduled restart at ${restartTime} WIB (in 1 minute). Please move to a safe location.`
+          );
+          this.lastCronExecution.scheduledRestartWarning = new Date();
+          this.lastCronExecution.scheduledRestartWarningSuccess = true;
+          logger.info(`[Cron] Scheduled restart warning sent at ${executionTime}`);
+        } catch (error) {
+          this.lastCronExecution.scheduledRestartWarning = new Date();
+          this.lastCronExecution.scheduledRestartWarningSuccess = false;
+          logger.error(`[Cron] Failed to send scheduled restart warning at ${executionTime}: ${error.message}`);
+        }
+      },
+      {
+        timezone: 'Asia/Jakarta',
+      }
+    );
+
+    cron.schedule(
+      scheduledRestartExpression,
+      async () => {
+        await this.runScheduledRestartCron();
+      },
+      {
+        timezone: 'Asia/Jakarta',
+      }
+    );
+
+    console.log('   - Scheduled restart warning at 03:59, 11:59, 17:59, 20:59 WIB');
+    console.log('   - Scheduled server restart at 04:00, 12:00, 18:00, 21:00 WIB');
 
     // Handle button interactions and modal submissions for auction system
     this.client.on(Events.InteractionCreate, async (interaction) => {
