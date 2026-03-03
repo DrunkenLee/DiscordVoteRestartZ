@@ -327,6 +327,48 @@ export class DiscordBot {
     }
   }
 
+  getNextScheduledRestartInfo() {
+    const restartHoursWib = [4, 12, 18, 21];
+    const wibOffsetMs = 7 * 60 * 60 * 1000;
+    const nowUtcMs = Date.now();
+
+    // Convert "now" to WIB date components using UTC getters
+    const nowWib = new Date(nowUtcMs + wibOffsetMs);
+    const year = nowWib.getUTCFullYear();
+    const month = nowWib.getUTCMonth();
+    const date = nowWib.getUTCDate();
+
+    // Midnight WIB in UTC milliseconds
+    const todayMidnightWibUtcMs = Date.UTC(year, month, date, 0, 0, 0, 0) - wibOffsetMs;
+
+    let nextRestartUtcMs = null;
+    for (const hour of restartHoursWib) {
+      const candidateUtcMs = todayMidnightWibUtcMs + hour * 60 * 60 * 1000;
+      if (candidateUtcMs > nowUtcMs) {
+        nextRestartUtcMs = candidateUtcMs;
+        break;
+      }
+    }
+
+    if (!nextRestartUtcMs) {
+      const tomorrowMidnightWibUtcMs = todayMidnightWibUtcMs + 24 * 60 * 60 * 1000;
+      nextRestartUtcMs = tomorrowMidnightWibUtcMs + restartHoursWib[0] * 60 * 60 * 1000;
+    }
+
+    return {
+      nextRestartDate: new Date(nextRestartUtcMs),
+      remainingMs: Math.max(0, nextRestartUtcMs - nowUtcMs),
+    };
+  }
+
+  formatRemainingTime(ms) {
+    const totalSeconds = Math.floor(Math.max(0, ms) / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours}h ${minutes}m ${seconds}s`;
+  }
+
   setupEventListeners(rconClient, auctionLogMonitor = null) {
     // Set up RCON with auto-reconnect wrapper
     const wrappedRconClient = this.setupRconConnection(rconClient);
@@ -952,6 +994,19 @@ export class DiscordBot {
           }
         }
 
+        const { nextRestartDate, remainingMs } = this.getNextScheduledRestartInfo();
+        const nextRestartWib = nextRestartDate.toLocaleString('en-US', {
+          timeZone: 'Asia/Jakarta',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        });
+        statusMessage += `**Next Scheduled Restart:** ${nextRestartWib} WIB\n`;
+        statusMessage += `**Time Remaining:** ${this.formatRemainingTime(remainingMs)}\n`;
         statusMessage += `**Timezone:** Asia/Jakarta (UTC+7)`;
 
         message.channel.send(statusMessage);
@@ -2099,7 +2154,7 @@ export class DiscordBot {
 
         try {
           await this.sendScheduledServerMessage(
-            `SERVER NOTICE: Scheduled restart at ${restartTime} WIB (in 1 minute). Please move to a safe location.`
+            `SERVER NOTICE: Scheduled restart at ${restartTime} WIB (in 1 minute). Please safely logout to prevent rollback.`
           );
           this.lastCronExecution.scheduledRestartWarning = new Date();
           this.lastCronExecution.scheduledRestartWarningSuccess = true;
