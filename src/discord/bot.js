@@ -328,7 +328,7 @@ export class DiscordBot {
   }
 
   getNextScheduledRestartInfo() {
-    const restartHoursWib = [4, 12, 18, 21];
+    const restartHoursWib = [4, 12, 18];
     const wibOffsetMs = 7 * 60 * 60 * 1000;
     const nowUtcMs = Date.now();
 
@@ -969,13 +969,13 @@ export class DiscordBot {
           },
           {
             name: 'Scheduled Restart Warning',
-            schedule: '03:59, 11:59, 17:59, 20:59 WIB',
+            schedule: '03:59, 11:59, 17:59 WIB',
             lastRun: this.lastCronExecution.scheduledRestartWarning,
             success: this.lastCronExecution.scheduledRestartWarningSuccess,
           },
           {
             name: 'Scheduled Server Restart',
-            schedule: '04:00, 12:00, 18:00, 21:00 WIB',
+            schedule: '04:00, 12:00, 18:00 WIB',
             lastRun: this.lastCronExecution.scheduledRestart,
             success: this.lastCronExecution.scheduledRestartSuccess,
           },
@@ -2116,8 +2116,8 @@ export class DiscordBot {
     // Vehicle removal notification checker - runs every N minutes (configurable)
     const autoshopInterval = config.get('autoshop.checkIntervalMinutes') || 1;
     const cronExpression = `*/${autoshopInterval} * * * *`;
-    const scheduledRestartWarningExpression = '59 3,11,17,20 * * *';
-    const scheduledRestartExpression = '0 4,12,18,21 * * *';
+    const scheduledRestartWarningExpression = '59 3,11,17 * * *';
+    const scheduledRestartExpression = '0 4,12,18 * * *';
 
     cron.schedule(
       cronExpression,
@@ -2180,8 +2180,8 @@ export class DiscordBot {
       }
     );
 
-    console.log('   - Scheduled restart warning at 03:59, 11:59, 17:59, 20:59 WIB');
-    console.log('   - Scheduled server restart at 04:00, 12:00, 18:00, 21:00 WIB');
+    console.log('   - Scheduled restart warning at 03:59, 11:59, 17:59 WIB');
+    console.log('   - Scheduled server restart at 04:00, 12:00, 18:00 WIB');
 
     // Handle button interactions and modal submissions for auction system
     this.client.on(Events.InteractionCreate, async (interaction) => {
