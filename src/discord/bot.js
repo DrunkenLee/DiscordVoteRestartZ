@@ -1936,10 +1936,6 @@ print(json.dumps(result, ensure_ascii=False))
             );
           }
 
-          if (!targetUser.username1 || !targetUser.password1) {
-            return message.channel.send('❌ Your whitelist account has no saved password yet. Please contact admin.');
-          }
-
           // 1. Remove user from whitelist via SSH
           const quotedUsername = this.quoteRconArg(targetUser.username1);
           const quotedPassword = this.quoteRconArg(targetUser.password1);
