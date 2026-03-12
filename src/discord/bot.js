@@ -1468,7 +1468,7 @@ export class DiscordBot {
           // 2. Add user to whitelist
           await wrappedRconClient.send(`adduser "${username1}" "${password1}"`);
 
-          // 3. Insert data to Supabase. If this is the second account for this Discord
+          // 3. Insert data to database. If this is the second account for this Discord
           //    populate the new row's username2 with the first account's username1.
           let username2ForNew = null;
           if (existingUsersForDiscord && existingUsersForDiscord.length >= 1) {
@@ -1557,7 +1557,7 @@ export class DiscordBot {
           // 2. Add user with new password
           await wrappedRconClient.send(`adduser "${username}" "${newPassword}"`);
 
-          // 3. Update password in Supabase
+          // 3. Update password in database
           await zmUsersDb.updateUserPasswordByDiscordId(discordid, newPassword);
 
           message.channel.send('✅ Password reset successful! Your whitelist password has been updated.');

@@ -18,7 +18,8 @@ export const login = async (req, res) => {
     });
 
     if (user) {
-      const token = jwt.sign({ id: user.id, username: user.username1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      const userId = user.id ?? user.userid;
+      const token = jwt.sign({ id: userId, username: user.username1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
       const userData = { ...user.toJSON() };
       delete userData.password1;
       delete userData.password2;

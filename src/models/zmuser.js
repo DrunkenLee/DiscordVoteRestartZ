@@ -4,6 +4,7 @@ import { sequelize } from './index.js';
 export const ZMUser = sequelize.define('ZMUser', {
   id: {
     type: DataTypes.BIGINT,
+    field: 'userid',
     primaryKey: true,
     autoIncrement: true
   },
@@ -31,7 +32,5 @@ export const ZMUser = sequelize.define('ZMUser', {
   }
 }, {
   tableName: 'zmusers',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: false // The table doesn't have an updated_at column
+  timestamps: true
 });

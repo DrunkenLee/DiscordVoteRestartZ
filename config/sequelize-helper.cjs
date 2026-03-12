@@ -8,18 +8,17 @@ function resolveDatabaseUrl() {
   const dbTarget = String(process.env.DB_TARGET ?? '').trim().toLowerCase();
 
   if (dbTarget === 'local' || dbTarget === 'prod') {
-    return process.env.DATABASE_URL_PROD || process.env.DATABASE_URL || process.env.SUPABASE_URL || null;
+    return process.env.DATABASE_URL_PROD || process.env.DATABASE_URL || null;
   }
 
   if (dbTarget === 'remote') {
-    return process.env.DATABASE_URL_REMOTE || process.env.DATABASE_URL || process.env.SUPABASE_URL || null;
+    return process.env.DATABASE_URL_REMOTE || process.env.DATABASE_URL || null;
   }
 
   return (
     process.env.DATABASE_URL ||
     process.env.DATABASE_URL_PROD ||
     process.env.DATABASE_URL_REMOTE ||
-    process.env.SUPABASE_URL ||
     null
   );
 }
@@ -75,7 +74,7 @@ function createSequelizeInstance(SequelizeCtor) {
   const databaseUrl = resolveDatabaseUrl();
 
   if (!databaseUrl) {
-    throw new Error('Missing database URL. Set DATABASE_URL_REMOTE, DATABASE_URL_PROD, DATABASE_URL, or SUPABASE_URL.');
+    throw new Error('Missing database URL. Set DATABASE_URL_REMOTE, DATABASE_URL_PROD, or DATABASE_URL.');
   }
 
   return new SequelizeCtor(databaseUrl, buildConnectionOptions());
@@ -85,7 +84,7 @@ function buildSequelizeCliConfig() {
   const databaseUrl = resolveDatabaseUrl();
 
   if (!databaseUrl) {
-    throw new Error('Missing database URL. Set DATABASE_URL_REMOTE, DATABASE_URL_PROD, DATABASE_URL, or SUPABASE_URL.');
+    throw new Error('Missing database URL. Set DATABASE_URL_REMOTE, DATABASE_URL_PROD, or DATABASE_URL.');
   }
 
   const connectionOptions = buildConnectionOptions();

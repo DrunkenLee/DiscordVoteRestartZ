@@ -1,21 +1,28 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import sequelizeHelper from '../../config/sequelize-helper.cjs';
 
 dotenv.config();
 
-// Use the connection string from your .env
-const pool = new Pool({
-  connectionString: process.env.SUPABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+const connectionString = sequelizeHelper.resolveDatabaseUrl();
+if (!connectionString) {
+  throw new Error('Missing database URL. Set DATABASE_URL_REMOTE, DATABASE_URL_PROD, or DATABASE_URL.');
+}
+
+const poolConfig = { connectionString };
+if (sequelizeHelper.shouldUseSsl()) {
+  poolConfig.ssl = { rejectUnauthorized: false };
+}
+
+const pool = new Pool(poolConfig);
 
 // Test connection on startup
 pool.query('SELECT NOW()')
   .then(res => {
-    console.log('Successfully connected to Supabase database:', res.rows[0].now);
+    console.log('Successfully connected to PostgreSQL database:', res.rows[0].now);
   })
   .catch(err => {
-    console.error('Error connecting to Supabase database:', err);
+    console.error('Error connecting to PostgreSQL database:', err);
   });
 
 // Example: Find user by Discord ID
