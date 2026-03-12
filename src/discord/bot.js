@@ -1341,7 +1341,7 @@ print(json.dumps(result, ensure_ascii=False))
         let whitelistCommands = '**Whitelist Commands:**\n';
         whitelistCommands += `\`${prefix}whitelistme\` - Auto-sync your whitelist data using your Discord name while you are online in-game.\n`;
         whitelistCommands += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
-        whitelistCommands += `\`${prefix}resetpassword <username> <oldpassword> <newpassword>\` - Reset password for a specific whitelist account.\n\n`;
+        whitelistCommands += `\`${prefix}resetpassword\` - Re-sync your whitelist account password from zmusers (no parameters).\n\n`;
         whitelistCommands += '**How to Whitelist:**\n';
         whitelistCommands += '0. Recommended: go online in-game using the same name as your Discord profile, then run `!whitelistme`.\n';
         whitelistCommands += '1. Use the command above with your SteamID64, desired username, and password.\n';
@@ -1873,25 +1873,10 @@ print(json.dumps(result, ensure_ascii=False))
           message.channel.send(errorMsg);
         }
       } else if (command === 'resetpassword') {
-        // Usage: !resetpassword <username> <oldpassword> <newpassword>
-        if (args.length < 3) {
-          try {
-            if (message.deletable) await message.delete();
-          } catch (e) {
-            console.error('Failed to delete message with sensitive info:', e);
-          }
-          return message.channel.send(
-            '❌ Missing arguments! Usage: `!resetpassword <username> <oldpassword> <newpassword>`\n' +
-            '**Note:** If your username has spaces, put everything before old/new password as username.\n' +
-            'Example: `!resetpassword My Game Name oldpass123 newpass123`'
-          );
-        }
-
-        const newPassword = args[args.length - 1];
-        const oldPassword = args[args.length - 2];
-        const username = args.slice(0, -2).join(' ').trim();
+        // Usage: !resetpassword (no parameters)
         const discordId = message.author.id;
         const discordTag = message.author.tag;
+        const nameCandidates = this.getDiscordNameCandidates(message);
 
         // Always try to delete the original message for security
         try {
@@ -1901,52 +1886,75 @@ print(json.dumps(result, ensure_ascii=False))
         }
 
         try {
-          if (!username) {
-            return message.channel.send('❌ Invalid username. Please provide a valid whitelist username.');
-          }
-
-          // Find specific account row by username + ownership
-          const user = await ZMUser.findOne({
+          // Primary match: account owned by this Discord user
+          const ownedUsers = await ZMUser.findAll({
             where: {
-              [Op.and]: [
-                { username1: { [Op.iLike]: username } },
-                {
-                  [Op.or]: [
-                    { discordid: discordId },
-                    { discordid: discordTag },
-                  ],
-                },
+              [Op.or]: [
+                { discordid: discordId },
+                { discordid: discordTag },
               ],
             },
+            order: [['updatedAt', 'DESC']],
           });
 
-          if (!user) {
+          // Fallback match by username candidate if no owned rows
+          let candidateUsers = ownedUsers;
+          if (candidateUsers.length === 0 && nameCandidates.length > 0) {
+            candidateUsers = await ZMUser.findAll({
+              where: {
+                [Op.or]: nameCandidates.map((name) => ({
+                  username1: { [Op.iLike]: name },
+                })),
+              },
+              order: [['updatedAt', 'DESC']],
+            });
+          }
+
+          if (candidateUsers.length === 0) {
             return message.channel.send('❌ You not whitelisted yet please do !whitelistme');
           }
 
-          // Check if old password matches
-          if (user.password1 !== oldPassword) {
-            return message.channel.send('❌ The old password you entered is incorrect.');
+          // Resolve per-account target deterministically
+          let targetUser = null;
+          if (candidateUsers.length === 1) {
+            targetUser = candidateUsers[0];
+          } else {
+            const exactNameMatches = candidateUsers.filter((u) =>
+              nameCandidates.some((name) => String(u.username1 || '').toLowerCase() === name.toLowerCase())
+            );
+
+            if (exactNameMatches.length === 1) {
+              targetUser = exactNameMatches[0];
+            }
+          }
+
+          if (!targetUser) {
+            const accountList = candidateUsers.map((u) => `\`${u.username1}\``).join(', ');
+            return message.channel.send(
+              `❌ Multiple whitelist accounts found: ${accountList}\n` +
+              'Please set your Discord display name to one exact in-game username and try `!resetpassword` again.'
+            );
+          }
+
+          if (!targetUser.username1 || !targetUser.password1) {
+            return message.channel.send('❌ Your whitelist account has no saved password yet. Please contact admin.');
           }
 
           // 1. Remove user from whitelist via SSH
-          const quotedUsername = this.quoteRconArg(user.username1);
-          const quotedNewPassword = this.quoteRconArg(newPassword);
+          const quotedUsername = this.quoteRconArg(targetUser.username1);
+          const quotedPassword = this.quoteRconArg(targetUser.password1);
 
           try {
             await this.runPzServerSendCommandOverSsh(`removeuserfromwhitelist ${quotedUsername}`);
           } catch (e) {
             // Ignore remove failures because account may not exist yet in whitelist table
-            console.warn(`removeuserfromwhitelist via SSH failed for ${user.username1}:`, e.message);
+            console.warn(`removeuserfromwhitelist via SSH failed for ${targetUser.username1}:`, e.message);
           }
 
-          // 2. Add user with new password via SSH
-          await this.runPzServerSendCommandOverSsh(`adduser ${quotedUsername} ${quotedNewPassword}`);
+          // 2. Re-add user using saved password from zmusers
+          await this.runPzServerSendCommandOverSsh(`adduser ${quotedUsername} ${quotedPassword}`);
 
-          // 3. Update password in database
-          await user.update({ password1: newPassword });
-
-          message.channel.send('✅ Password reset successful! Your whitelist password has been updated.');
+          message.channel.send('✅ Password reset successful! Your whitelist account has been re-synced.');
         } catch (err) {
           console.error('Error processing password reset:', err);
           let errorMsg = '❌ Error processing password reset.';
