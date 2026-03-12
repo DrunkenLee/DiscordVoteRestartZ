@@ -256,7 +256,7 @@ export class DiscordBot {
     }
   }
 
-  async runSshCommand(command) {
+  async runSshCommandWithOutput(command) {
     const sshConfig = {
       host: process.env.OVH_SG_HOST,
       port: process.env.OVH_SG_PORT_SSH,
@@ -265,7 +265,9 @@ export class DiscordBot {
     };
 
     const conn = new SSHClient();
-    await new Promise((resolve, reject) => {
+    return await new Promise((resolve, reject) => {
+      let stdout = '';
+      let stderr = '';
       conn
         .on('ready', () => {
           conn.exec(command, (err, stream) => {
@@ -274,17 +276,253 @@ export class DiscordBot {
               return reject(err);
             }
 
-            stream.on('close', () => {
+            stream.on('close', (code) => {
               conn.end();
-              resolve();
+              resolve({ stdout, stderr, code });
             });
-            stream.on('data', () => {});
-            stream.stderr.on('data', () => {});
+            stream.on('data', (data) => {
+              stdout += data.toString('utf8');
+            });
+            stream.stderr.on('data', (data) => {
+              stderr += data.toString('utf8');
+            });
           });
         })
         .on('error', reject)
         .connect(sshConfig);
     });
+  }
+
+  async runSshCommand(command) {
+    await this.runSshCommandWithOutput(command);
+  }
+
+  async runPzServerSendCommandOverSsh(gameCommand) {
+    const escapedGameCommand = String(gameCommand ?? '').replace(/'/g, `'\"'\"'`);
+    const sshCommand = `cd /home/pzserver && ./pzserver send '${escapedGameCommand}'`;
+    const { stdout, stderr, code } = await this.runSshCommandWithOutput(sshCommand);
+
+    if (code !== 0) {
+      const output = [stdout, stderr].filter(Boolean).join(' ').trim();
+      throw new Error(output || `SSH command failed with exit code ${code}`);
+    }
+
+    return { stdout, stderr };
+  }
+
+  quoteRconArg(value) {
+    const text = String(value ?? '');
+    return `"${text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+  }
+
+  formatClientExeUsernameArg(username) {
+    const text = String(username ?? '').trim();
+    if (!text) return '';
+    return /\s/.test(text) ? this.quoteRconArg(text) : text;
+  }
+
+  parseOnlinePlayers(playersResponse) {
+    if (!playersResponse || typeof playersResponse !== 'string') {
+      return [];
+    }
+
+    const playerLines = playersResponse
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    const onlinePlayers = [];
+    for (const line of playerLines) {
+      if (/^players connected/i.test(line) || /^no players connected/i.test(line)) {
+        continue;
+      }
+
+      const withIdMatch = line.match(/^-?(.*?)\s*\(id=.*\)$/i);
+      if (withIdMatch && withIdMatch[1]) {
+        onlinePlayers.push(withIdMatch[1].trim());
+        continue;
+      }
+
+      const fallbackMatch = line.match(/^-?([^\s(]+)/);
+      if (fallbackMatch && fallbackMatch[1]) {
+        onlinePlayers.push(fallbackMatch[1].trim());
+      }
+    }
+
+    return [...new Set(onlinePlayers.filter(Boolean))];
+  }
+
+  getDiscordNameCandidates(message) {
+    const candidates = [
+      message.member?.displayName,
+      message.author?.globalName,
+      message.author?.username,
+    ]
+      .map(name => (typeof name === 'string' ? name.trim() : ''))
+      .filter(Boolean);
+
+    return [...new Set(candidates)];
+  }
+
+  findOnlineUsernameMatch(message, onlinePlayers) {
+    const candidates = this.getDiscordNameCandidates(message);
+    const onlineByLower = new Map(
+      onlinePlayers.map(name => [name.toLowerCase(), name])
+    );
+
+    for (const candidate of candidates) {
+      const match = onlineByLower.get(candidate.toLowerCase());
+      if (match) {
+        return { matchedUsername: match, candidates };
+      }
+    }
+
+    return { matchedUsername: null, candidates };
+  }
+
+  extractJsonFromText(rawText) {
+    const text = String(rawText ?? '').trim();
+    if (!text) return null;
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      const firstCurly = text.indexOf('{');
+      const lastCurly = text.lastIndexOf('}');
+      if (firstCurly !== -1 && lastCurly > firstCurly) {
+        const slice = text.slice(firstCurly, lastCurly + 1);
+        try {
+          return JSON.parse(slice);
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+
+  getFirstValueFromRecord(record, keys) {
+    if (!record || typeof record !== 'object') return null;
+    const entries = Object.entries(record);
+    for (const key of keys) {
+      const match = entries.find(([entryKey]) => entryKey.toLowerCase() === key.toLowerCase());
+      if (match && match[1] !== undefined && match[1] !== null && match[1] !== '') {
+        return match[1];
+      }
+    }
+    return null;
+  }
+
+  parseExtraData(extraData) {
+    if (!extraData) {
+      return {};
+    }
+
+    if (typeof extraData === 'object') {
+      return { ...extraData };
+    }
+
+    if (typeof extraData === 'string') {
+      try {
+        const parsed = JSON.parse(extraData);
+        if (parsed && typeof parsed === 'object') {
+          return parsed;
+        }
+      } catch {
+        return { legacy: extraData };
+      }
+    }
+
+    return {};
+  }
+
+  async fetchPlayerFromPlayersDb(username) {
+    const playersDbPath = process.env.PZ_PLAYERS_DB_PATH || '/home/pzserver/Zomboid/Saves/Multiplayer/pzserver/players.db';
+    const pythonScript = `
+import json
+import sqlite3
+
+db_path = ${JSON.stringify(playersDbPath)}
+target_username = ${JSON.stringify(username)}
+candidate_tables = ["localPlayers", "players", "networkPlayers"]
+candidate_username_columns = ["username", "name", "displayname", "playername"]
+
+def quote_identifier(value):
+    return '"' + value.replace('"', '""') + '"'
+
+def serialize_value(value):
+    if isinstance(value, bytes):
+        return {
+            "__type": "bytes",
+            "length": len(value)
+        }
+    return value
+
+result = {
+    "ok": True,
+    "found": False,
+    "table": None,
+    "usernameColumn": None,
+    "row": None
+}
+
+try:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    table_rows = cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    all_tables = [row[0] for row in table_rows]
+    ordered_tables = [table for table in candidate_tables if table in all_tables] + [table for table in all_tables if table not in candidate_tables]
+
+    for table in ordered_tables:
+        table_info = cursor.execute(f"PRAGMA table_info({quote_identifier(table)})").fetchall()
+        columns = [row[1] for row in table_info]
+        if not columns:
+            continue
+
+        lower_columns = {column.lower(): column for column in columns}
+        username_column = None
+        for candidate_column in candidate_username_columns:
+            if candidate_column in lower_columns:
+                username_column = lower_columns[candidate_column]
+                break
+
+        if not username_column:
+            continue
+
+        query = f"SELECT * FROM {quote_identifier(table)} WHERE lower({quote_identifier(username_column)}) = lower(?) LIMIT 1"
+        row = cursor.execute(query, (target_username,)).fetchone()
+        if row:
+            result["found"] = True
+            result["table"] = table
+            result["usernameColumn"] = username_column
+            result["row"] = {key: serialize_value(row[key]) for key in row.keys()}
+            break
+
+    conn.close()
+except Exception as error:
+    result = {
+        "ok": False,
+        "error": str(error)
+    }
+
+print(json.dumps(result, ensure_ascii=False))
+`.trim();
+
+    const command = `python3 - <<'PY'\n${pythonScript}\nPY`;
+    const { stdout, stderr, code } = await this.runSshCommandWithOutput(command);
+
+    const parsed = this.extractJsonFromText(stdout);
+    if (!parsed) {
+      throw new Error(`Failed to parse players.db query output (code=${code}). stderr=${stderr || '(none)'}`);
+    }
+
+    if (!parsed.ok) {
+      throw new Error(parsed.error || 'Unknown error while querying players.db');
+    }
+
+    return parsed;
   }
 
   async sendScheduledServerMessage(message) {
@@ -1101,9 +1339,11 @@ export class DiscordBot {
 
         // Whitelist Commands Message
         let whitelistCommands = '**Whitelist Commands:**\n';
+        whitelistCommands += `\`${prefix}whitelistme\` - Auto-sync your whitelist data using your Discord name while you are online in-game.\n`;
         whitelistCommands += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
-        whitelistCommands += `\`${prefix}resetpassword <oldpassword> <newpassword>\` - Reset your whitelist password. You must provide your current password. Your message will be deleted for security.\n\n`;
+        whitelistCommands += `\`${prefix}resetpassword <username> <oldpassword> <newpassword>\` - Reset password for a specific whitelist account.\n\n`;
         whitelistCommands += '**How to Whitelist:**\n';
+        whitelistCommands += '0. Recommended: go online in-game using the same name as your Discord profile, then run `!whitelistme`.\n';
         whitelistCommands += '1. Use the command above with your SteamID64, desired username, and password.\n';
         whitelistCommands += '2. Example: `!whitelistrequest 76561198000000000 MyUsername MyPassword`\n';
         whitelistCommands += '3. **For usernames with spaces:** `!whitelistrequest 76561198000000000 My Game Name MyPassword`\n';
@@ -1400,6 +1640,132 @@ export class DiscordBot {
           message.channel.send(`Error initiating server start: ${error.message}`);
           console.error('Error during start command:', error);
         }
+      } else if (command === 'whitelistme') {
+        try {
+          const discordId = message.author.id;
+          const discordTag = message.author.tag;
+
+          const playersResponse = await wrappedRconClient.send('players');
+          const onlinePlayers = this.parseOnlinePlayers(playersResponse);
+          if (onlinePlayers.length === 0) {
+            return message.channel.send('No players are online right now. Join the game first, then run `!whitelistme` again.');
+          }
+
+          const { matchedUsername, candidates } = this.findOnlineUsernameMatch(message, onlinePlayers);
+          if (!matchedUsername) {
+            return message.channel.send(
+              `No online in-game username matches your Discord name. Checked: ${candidates.map(name => `\`${name}\``).join(', ') || '(none)'}. ` +
+              'Use the same Discord name as your in-game username, then try again while online.'
+            );
+          }
+
+          const playersDbResult = await this.fetchPlayerFromPlayersDb(matchedUsername);
+          const playersDbRow = playersDbResult.row || null;
+          const steamidFromDb = this.getFirstValueFromRecord(playersDbRow, ['steamid', 'steam_id', 'steamid64', 'steamid32']);
+          const owneridFromDb = this.getFirstValueFromRecord(playersDbRow, ['ownerid', 'owner_id']);
+
+          const existingUser = await ZMUser.findOne({
+            where: {
+              [Op.or]: [
+                { discordid: discordId },
+                { discordid: discordTag },
+                { username1: { [Op.iLike]: matchedUsername } },
+              ],
+            },
+          });
+
+          const existingExtraData = this.parseExtraData(existingUser?.extradata);
+          const nowIso = new Date().toISOString();
+          const existingWhitelistMeData =
+            existingExtraData.whitelistme && typeof existingExtraData.whitelistme === 'object'
+              ? existingExtraData.whitelistme
+              : {};
+
+          const rewardAlreadyGranted = Boolean(existingWhitelistMeData.reward50000GrantedAt);
+
+          const mergedExtraData = {
+            ...existingExtraData,
+            source: 'whitelistme',
+            syncedAt: nowIso,
+            discord: {
+              id: discordId,
+              tag: discordTag,
+              nameCandidates: candidates,
+            },
+            playersDb: {
+              path: process.env.PZ_PLAYERS_DB_PATH || '/home/pzserver/Zomboid/Saves/Multiplayer/pzserver/players.db',
+              found: !!playersDbResult.found,
+              table: playersDbResult.table || null,
+              usernameColumn: playersDbResult.usernameColumn || null,
+              row: playersDbRow,
+            },
+            whitelistme: {
+              ...existingWhitelistMeData,
+              lastSyncedAt: nowIso,
+              reward50000Target: existingWhitelistMeData.reward50000Target || matchedUsername,
+              reward50000GrantedAt: existingWhitelistMeData.reward50000GrantedAt || null,
+            },
+          };
+
+          const userPayload = {
+            discordid: discordId,
+            username1: matchedUsername,
+            steamid: steamidFromDb ? String(steamidFromDb) : null,
+            ownerid: owneridFromDb ? String(owneridFromDb) : null,
+            extradata: JSON.stringify(mergedExtraData),
+          };
+
+          let userRecord = existingUser;
+          if (existingUser) {
+            await existingUser.update({
+              discordid: discordId,
+              username1: matchedUsername,
+              steamid: userPayload.steamid || existingUser.steamid,
+              ownerid: userPayload.ownerid || existingUser.ownerid,
+              extradata: userPayload.extradata,
+            });
+          } else {
+            userRecord = await ZMUser.create({
+              ...userPayload,
+              password1: null,
+              username2: null,
+              password2: null,
+            });
+          }
+
+          let adduserExecuted = false;
+          if (!playersDbResult.found) {
+            await wrappedRconClient.send(`adduser ${this.quoteRconArg(matchedUsername)}`);
+            adduserExecuted = true;
+          }
+
+          let rewardExecuted = false;
+          if (!rewardAlreadyGranted) {
+            const targetUsernameArg = this.formatClientExeUsernameArg(matchedUsername);
+            await wrappedRconClient.send(`luacmd clientexe ${targetUsernameArg} addplayerpoints ${targetUsernameArg} 50000`);
+            rewardExecuted = true;
+            mergedExtraData.whitelistme.reward50000GrantedAt = new Date().toISOString();
+            mergedExtraData.whitelistme.reward50000Target = matchedUsername;
+            await userRecord.update({ extradata: JSON.stringify(mergedExtraData) });
+          }
+
+          const whitelistedRole = message.guild?.roles?.cache?.find((role) => role.name.toLowerCase() === 'whitelisted');
+          if (whitelistedRole) {
+            try {
+              const member = await message.guild.members.fetch(discordId);
+              if (member && !member.roles.cache.has(whitelistedRole.id)) {
+                await member.roles.add(whitelistedRole);
+              }
+            } catch (roleErr) {
+              console.warn('[WhitelistMe] Failed to assign Whitelisted role:', roleErr.message);
+            }
+          }
+
+          return message.channel.send(`Whitelist sync complete for ${matchedUsername}.\nnow you can use  !resetpassword`);
+        } catch (error) {
+          console.error('Error in !whitelistme:', error);
+          return message.channel.send(`Error processing whitelist sync: ${error.message}`);
+        }
       } else if (command === 'whitelistrequest') {
 
         if (args.length < 3) {
@@ -1507,18 +1873,25 @@ export class DiscordBot {
           message.channel.send(errorMsg);
         }
       } else if (command === 'resetpassword') {
-        // Usage: !resetpassword <oldpassword> <newpassword>
-        if (args.length < 2) {
+        // Usage: !resetpassword <username> <oldpassword> <newpassword>
+        if (args.length < 3) {
           try {
             if (message.deletable) await message.delete();
           } catch (e) {
             console.error('Failed to delete message with sensitive info:', e);
           }
-          return message.channel.send('❌ Missing arguments! Usage: `!resetpassword <oldpassword> <newpassword>`');
+          return message.channel.send(
+            '❌ Missing arguments! Usage: `!resetpassword <username> <oldpassword> <newpassword>`\n' +
+            '**Note:** If your username has spaces, put everything before old/new password as username.\n' +
+            'Example: `!resetpassword My Game Name oldpass123 newpass123`'
+          );
         }
 
-        const [oldPassword, newPassword] = args;
-        const discordid = message.author.tag;
+        const newPassword = args[args.length - 1];
+        const oldPassword = args[args.length - 2];
+        const username = args.slice(0, -2).join(' ').trim();
+        const discordId = message.author.id;
+        const discordTag = message.author.tag;
 
         // Always try to delete the original message for security
         try {
@@ -1528,17 +1901,27 @@ export class DiscordBot {
         }
 
         try {
-          // Find user by Discord ID
-          const user = await zmUsersDb.findUserByDiscordId(discordid);
-
-          if (!user) {
-            return message.channel.send('❌ No whitelist entry found for your Discord account.');
+          if (!username) {
+            return message.channel.send('❌ Invalid username. Please provide a valid whitelist username.');
           }
 
-          const username = user.username1;
+          // Find specific account row by username + ownership
+          const user = await ZMUser.findOne({
+            where: {
+              [Op.and]: [
+                { username1: { [Op.iLike]: username } },
+                {
+                  [Op.or]: [
+                    { discordid: discordId },
+                    { discordid: discordTag },
+                  ],
+                },
+              ],
+            },
+          });
 
-          if (!username) {
-            return message.channel.send('❌ No username found for your whitelist entry.');
+          if (!user) {
+            return message.channel.send('❌ You not whitelisted yet please do !whitelistme');
           }
 
           // Check if old password matches
@@ -1546,19 +1929,22 @@ export class DiscordBot {
             return message.channel.send('❌ The old password you entered is incorrect.');
           }
 
-          // 1. Remove user from whitelist (ignore errors)
+          // 1. Remove user from whitelist via SSH
+          const quotedUsername = this.quoteRconArg(user.username1);
+          const quotedNewPassword = this.quoteRconArg(newPassword);
+
           try {
-            await wrappedRconClient.send(`removeuserfromwhitelist "${username}"`);
+            await this.runPzServerSendCommandOverSsh(`removeuserfromwhitelist ${quotedUsername}`);
           } catch (e) {
-            // Ignore errors, user might not exist yet
-            console.warn(`removeuserfromwhitelist failed for ${username}:`, e.message);
+            // Ignore remove failures because account may not exist yet in whitelist table
+            console.warn(`removeuserfromwhitelist via SSH failed for ${user.username1}:`, e.message);
           }
 
-          // 2. Add user with new password
-          await wrappedRconClient.send(`adduser "${username}" "${newPassword}"`);
+          // 2. Add user with new password via SSH
+          await this.runPzServerSendCommandOverSsh(`adduser ${quotedUsername} ${quotedNewPassword}`);
 
           // 3. Update password in database
-          await zmUsersDb.updateUserPasswordByDiscordId(discordid, newPassword);
+          await user.update({ password1: newPassword });
 
           message.channel.send('✅ Password reset successful! Your whitelist password has been updated.');
         } catch (err) {
@@ -1802,7 +2188,8 @@ export class DiscordBot {
           }
 
           try {
-            await wrappedRconClient.send(`luacmd clientexe ${username} addplayerpoints ${username} ${points}`);
+            const targetUsernameArg = this.formatClientExeUsernameArg(username);
+            await wrappedRconClient.send(`luacmd clientexe ${targetUsernameArg} addplayerpoints ${targetUsernameArg} ${points}`);
             message.channel.send(`✅ Added ${points} points to player ${username}`);
           } catch (error) {
             message.channel.send(`❌ Error executing command: ${error.message}`);
