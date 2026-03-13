@@ -699,6 +699,54 @@ print(json.dumps(result, ensure_ascii=False))
         }
       }
 
+      if (command === 'topupraidpoint') {
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to use this command.');
+        }
+
+        if (!args[0] || args[1] === undefined) {
+          return message.channel.send(`Usage: ${prefix}topupraidpoint <username> <value>`);
+        }
+
+        const username = String(args[0]).trim();
+        const value = Number(args[1]);
+        if (!Number.isFinite(value)) {
+          return message.channel.send('❌ Invalid value. Please provide a numeric value.');
+        }
+
+        try {
+          const targetArg = this.formatClientExeUsernameArg(username);
+          const cmd = `luacmd clientexe ${targetArg} addskinpoint ${targetArg} ${value}`;
+          await wrappedRconClient.send(cmd);
+          return message.channel.send(`✅ Executed topup raid point for **${username}** with value **${value}**.`);
+        } catch (error) {
+          console.error('Error in topupraidpoint:', error);
+          return message.channel.send(`❌ Failed to execute topupraidpoint: ${error.message}`);
+        }
+      }
+
+      if (command === 'resetrepaircooldown') {
+        if (!isDeveloper && !isAdmin) {
+          return message.channel.send('❌ You need the @developer or @admin role to use this command.');
+        }
+
+        if (!args[0]) {
+          return message.channel.send(`Usage: ${prefix}resetrepaircooldown <username>`);
+        }
+
+        const username = String(args[0]).trim();
+
+        try {
+          const targetArg = this.formatClientExeUsernameArg(username);
+          const cmd = `luacmd clientexe ${targetArg} setlastrepairtime ${targetArg}`;
+          await wrappedRconClient.send(cmd);
+          return message.channel.send(`✅ Executed reset repair cooldown for **${username}**.`);
+        } catch (error) {
+          console.error('Error in resetrepaircooldown:', error);
+          return message.channel.send(`❌ Failed to execute resetrepaircooldown: ${error.message}`);
+        }
+      }
+
       if (command === 'ping') {
         // Simple ping response
         const timeBefore = Date.now();
@@ -2009,16 +2057,11 @@ print(json.dumps(result, ensure_ascii=False))
           let helpMessage3 = '**🕰️ Cron Job Management:**\n';
           helpMessage3 += '```\n';
           helpMessage3 += '!cronstatus - Check cron job status\n';
-          helpMessage3 += '!testcron supply - Test supply run reset\n';
-          helpMessage3 += '!testcron tank - Test global flags reset\n';
-          helpMessage3 += '!testcron both - Test both cron jobs\n';
           helpMessage3 += '```\n';
-          helpMessage3 += '**🏪 Auction System:**\n';
+          helpMessage3 += '**🛠️ Admin/Developer Utility:**\n';
           helpMessage3 += '```\n';
-          helpMessage3 += '!devauctionstatus - Check auction monitor status\n';
-          helpMessage3 += '!devauctionscan - Trigger auction log scan\n';
-          helpMessage3 += '!devauctionstart - Start auction monitoring\n';
-          helpMessage3 += '!devauctionstop - Stop auction monitoring\n';
+          helpMessage3 += '!topupraidpoint <username> <value> - Top up raid point via addskinpoint\n';
+          helpMessage3 += '!resetrepaircooldown <username> - Reset repair cooldown via setlastrepairtime\n';
           helpMessage3 += '```\n';
           helpMessage3 += '**Note:** All commands require @admin or @developer role.';
 
