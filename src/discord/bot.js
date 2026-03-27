@@ -718,6 +718,143 @@ print(json.dumps(result, ensure_ascii=False))
     );
   }
 
+  normalizeLookupValue(value) {
+    return String(value ?? '').trim().toLowerCase();
+  }
+
+  extractMentionedDiscordId(value) {
+    const mentionMatch = String(value ?? '').trim().match(/^<@!?(\d+)>$/);
+    return mentionMatch ? mentionMatch[1] : null;
+  }
+
+  async getLinkedGameUsernamesByDiscordIds(discordUserIds = []) {
+    const normalizedIds = [...new Set(discordUserIds.map(id => String(id ?? '').trim()).filter(Boolean))];
+    const byDiscordId = new Map();
+
+    if (normalizedIds.length === 0) {
+      return byDiscordId;
+    }
+
+    const linkedUsers = await ZMUser.findAll({
+      attributes: ['discordid', 'username1'],
+      where: {
+        discordid: {
+          [Op.in]: normalizedIds,
+        },
+      },
+    });
+
+    for (const linkedUser of linkedUsers) {
+      const discordId = String(linkedUser.discordid ?? '').trim();
+      const username = String(linkedUser.username1 ?? '').trim();
+
+      if (!discordId || !username) {
+        continue;
+      }
+
+      if (!byDiscordId.has(discordId)) {
+        byDiscordId.set(discordId, []);
+      }
+
+      const existing = byDiscordId.get(discordId);
+      if (!existing.some(name => this.normalizeLookupValue(name) === this.normalizeLookupValue(username))) {
+        existing.push(username);
+      }
+    }
+
+    return byDiscordId;
+  }
+
+  getClockSessionCandidates(session, linkedUsernames = []) {
+    const values = [
+      session.discordUserId,
+      session.discordUsername,
+      session.discordDisplayName,
+      ...linkedUsernames,
+    ];
+
+    return [...new Set(values.map(value => String(value ?? '').trim()).filter(Boolean))];
+  }
+
+  findSessionByLookupInput(input, openSessions, linkedUsernamesByDiscordId) {
+    const rawInput = String(input ?? '').trim();
+    const normalizedInput = this.normalizeLookupValue(rawInput);
+    if (!normalizedInput) {
+      return { session: null, reason: 'empty' };
+    }
+
+    const mentionedDiscordId = this.extractMentionedDiscordId(rawInput);
+    if (mentionedDiscordId) {
+      const sessionByMention = openSessions.find(session => String(session.discordUserId) === mentionedDiscordId);
+      return { session: sessionByMention || null, reason: sessionByMention ? null : 'not_found' };
+    }
+
+    const exactMatches = [];
+    for (const session of openSessions) {
+      const linkedUsernames = linkedUsernamesByDiscordId.get(String(session.discordUserId)) || [];
+      const candidates = this.getClockSessionCandidates(session, linkedUsernames);
+      const isExactMatch = candidates.some(candidate => this.normalizeLookupValue(candidate) === normalizedInput);
+      if (isExactMatch) {
+        exactMatches.push(session);
+      }
+    }
+
+    if (exactMatches.length === 1) {
+      return { session: exactMatches[0], reason: null };
+    }
+
+    if (exactMatches.length > 1) {
+      return { session: null, reason: 'ambiguous_exact' };
+    }
+
+    const partialMatches = [];
+    for (const session of openSessions) {
+      const linkedUsernames = linkedUsernamesByDiscordId.get(String(session.discordUserId)) || [];
+      const candidates = this.getClockSessionCandidates(session, linkedUsernames);
+      const isPartialMatch = candidates.some(candidate => this.normalizeLookupValue(candidate).includes(normalizedInput));
+      if (isPartialMatch) {
+        partialMatches.push(session);
+      }
+    }
+
+    if (partialMatches.length === 1) {
+      return { session: partialMatches[0], reason: null };
+    }
+
+    if (partialMatches.length > 1) {
+      return { session: null, reason: 'ambiguous_partial' };
+    }
+
+    return { session: null, reason: 'not_found' };
+  }
+
+  getOnlinePlayerMatch(candidates, onlinePlayersLookup) {
+    for (const candidate of candidates) {
+      const match = onlinePlayersLookup.get(this.normalizeLookupValue(candidate));
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  async closeClockSession(openSession, clockOutChannelId = null) {
+    const clockOutAt = new Date();
+    const clockInAt = new Date(openSession.clockInAt);
+    const durationMinutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000));
+
+    await openSession.update({
+      clockOutAt,
+      clockOutChannelId,
+      durationMinutes,
+    });
+
+    return {
+      clockOutAt,
+      durationMinutes,
+    };
+  }
+
   setupEventListeners(rconClient, auctionLogMonitor = null) {
     // Set up RCON with auto-reconnect wrapper
     const wrappedRconClient = this.setupRconConnection(rconClient);
@@ -883,6 +1020,126 @@ print(json.dumps(result, ensure_ascii=False))
         } catch (error) {
           console.error('Error in !clockout:', error);
           return message.channel.send(`❌ Failed to save clock-out: ${error.message}`);
+        }
+      }
+
+      if (command === 'devclockout') {
+        if (!isDeveloper) {
+          return message.channel.send('ERROR: You need the @developer role to use this command.');
+        }
+
+        const lookupInput = args.join(' ').trim();
+        if (!lookupInput) {
+          return message.channel.send(`Usage: ${prefix}devclockout <username|display name|@mention|discord id>`);
+        }
+
+        try {
+          const openSessions = await AdminClockSession.findAll({
+            where: { clockOutAt: null },
+            order: [['clockInAt', 'ASC']],
+          });
+
+          if (openSessions.length === 0) {
+            return message.channel.send('INFO: No active admin clock-in session found.');
+          }
+
+          const linkedUsernamesByDiscordId = await this.getLinkedGameUsernamesByDiscordIds(
+            openSessions.map(session => session.discordUserId)
+          );
+
+          const { session: targetSession, reason } = this.findSessionByLookupInput(
+            lookupInput,
+            openSessions,
+            linkedUsernamesByDiscordId
+          );
+
+          if (!targetSession) {
+            if (reason === 'ambiguous_exact' || reason === 'ambiguous_partial') {
+              return message.channel.send(
+                'ERROR: Multiple active sessions matched that input. Please use a Discord mention (`@user`) or Discord ID for exact target.'
+              );
+            }
+            return message.channel.send(`ERROR: No active clock-in session found for **${lookupInput}**.`);
+          }
+
+          const { clockOutAt, durationMinutes } = await this.closeClockSession(
+            targetSession,
+            message.channel?.id || null
+          );
+
+          const targetName = targetSession.discordDisplayName || targetSession.discordUsername || targetSession.discordUserId;
+          return message.channel.send(
+            `SUCCESS: Developer force clock-out completed for **${targetName}**.\n` +
+            `Clocked in at: **${this.formatJakartaDateTime(targetSession.clockInAt)} WIB**\n` +
+            `Clocked out at: **${this.formatJakartaDateTime(clockOutAt)} WIB**\n` +
+            `Duration: **${this.formatDurationMinutes(durationMinutes)}** (${durationMinutes} minutes)`
+          );
+        } catch (error) {
+          console.error('Error in !devclockout:', error);
+          return message.channel.send(`ERROR: Failed to force clock-out: ${error.message}`);
+        }
+      }
+
+      if (command === 'admin') {
+        try {
+          const openSessions = await AdminClockSession.findAll({
+            where: { clockOutAt: null },
+            order: [['clockInAt', 'ASC']],
+          });
+
+          if (openSessions.length === 0) {
+            return message.channel.send('There is no active admin right now.');
+          }
+
+          const linkedUsernamesByDiscordId = await this.getLinkedGameUsernamesByDiscordIds(
+            openSessions.map(session => session.discordUserId)
+          );
+
+          let playersLookup = new Map();
+          let playersCheckWarning = '';
+
+          try {
+            const playersResponse = await wrappedRconClient.send('players');
+            const onlinePlayers = this.parseOnlinePlayers(playersResponse);
+            playersLookup = new Map(
+              onlinePlayers.map(playerName => [this.normalizeLookupValue(playerName), playerName])
+            );
+          } catch (playersError) {
+            playersCheckWarning = `\nWARNING: Could not verify in-game status from RCON: ${playersError.message}`;
+          }
+
+          const nowTs = Date.now();
+          let response = `Active Admin Sessions (${openSessions.length})\n`;
+
+          for (const session of openSessions) {
+            const linkedUsernames = linkedUsernamesByDiscordId.get(String(session.discordUserId)) || [];
+            const candidates = this.getClockSessionCandidates(session, linkedUsernames);
+            const matchedOnlineName = this.getOnlinePlayerMatch(candidates, playersLookup);
+            const durationMinutes = Math.max(
+              0,
+              Math.round((nowTs - new Date(session.clockInAt).getTime()) / 60000)
+            );
+
+            const adminLabel = session.discordDisplayName || session.discordUsername || session.discordUserId;
+            const discordTag = session.discordUsername ? `@${session.discordUsername}` : session.discordUserId;
+            const onlineStatus = matchedOnlineName
+              ? `ONLINE in-game${playersLookup.size > 0 ? ` as **${matchedOnlineName}**` : ''}`
+              : (playersLookup.size > 0 ? 'OFFLINE in-game' : 'UNKNOWN in-game status');
+            const linkedText = linkedUsernames.length > 0 ? linkedUsernames.join(', ') : '-';
+
+            response +=
+              `\n- **${adminLabel}** (${discordTag})\n` +
+              `  Clocked in: ${this.formatJakartaDateTime(session.clockInAt)} WIB\n` +
+              `  Active duration: ${this.formatDurationMinutes(durationMinutes)} (${durationMinutes} minutes)\n` +
+              `  In-game status: ${onlineStatus}\n` +
+              `  Linked game usernames: ${linkedText}\n`;
+          }
+
+          response += playersCheckWarning;
+          return message.channel.send(response);
+        } catch (error) {
+          console.error('Error in !admin:', error);
+          return message.channel.send(`ERROR: Failed to read active admin sessions: ${error.message}`);
         }
       }
 
@@ -1523,6 +1780,7 @@ print(json.dumps(result, ensure_ascii=False))
         generalCommands += `\`${prefix}checkupdate\` - Check for mod updates\n`;
         generalCommands += `\`${prefix}serverinfo\` - Display server info from BattleMetrics\n`;
   generalCommands += `\`${prefix}syncpoint\` - Refresh your points file from the game server (use before bidding if asked)\n`;
+        generalCommands += `\`${prefix}admin\` - Show active clocked-in admins and whether they are online in-game\n`;
 
         // Whitelist Commands Message
         let whitelistCommands = '**Whitelist Commands:**\n';
@@ -1551,6 +1809,7 @@ print(json.dumps(result, ensure_ascii=False))
         otherCommands += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
         otherCommands += `\`${prefix}clockin\` - Start your admin activity session (requires @admin role)\n`;
         otherCommands += `\`${prefix}clockout\` - End your admin activity session and save duration (requires @admin role)\n`;
+        otherCommands += `\`${prefix}devclockout <username>\` - Force clockout an active admin session (requires @developer role)\n`;
         otherCommands += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n`;
         otherCommands += `\`${prefix}cronstatus\` - Check cron job execution status (requires @admin/@developer role)\n`;
         otherCommands += `\`${prefix}testcron <supply|tank|both>\` - Manually test cron jobs (requires @admin/@developer role)\n\n`;
@@ -2203,6 +2462,7 @@ print(json.dumps(result, ensure_ascii=False))
           helpMessage3 += '```\n';
           helpMessage3 += '!topupraidpoint <username> <value> - Top up raid point via addskinpoint\n';
           helpMessage3 += '!resetrepaircooldown <username> - Reset repair cooldown via setlastrepairtime\n';
+          helpMessage3 += '!devclockout <username> - Force clockout for active admin clock session\n';
           helpMessage3 += '```\n';
           helpMessage3 += '**Note:** All commands require @admin or @developer role.';
 
