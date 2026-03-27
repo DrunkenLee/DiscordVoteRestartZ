@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Events, ActivityType, EmbedBuilder, ActionRo
 import { BattleMetricsAPI } from '../utils/battlemetrics.js';
 import { PlayerAuction } from '../models/playerAuction.js';
 import { ZMUser } from '../models/zmuser.js';
+import { AdminClockSession } from '../models/adminClockSession.js';
 import { Op } from 'sequelize';
 import config from '../config/config.js';
 import { commands } from './commands.js';
@@ -607,6 +608,116 @@ print(json.dumps(result, ensure_ascii=False))
     return `${hours}h ${minutes}m ${seconds}s`;
   }
 
+  getJakartaDateOnly(date = new Date()) {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  }
+
+  formatJakartaDateTime(date) {
+    if (!date) return '-';
+    return new Date(date).toLocaleString('en-GB', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+  }
+
+  formatDurationMinutes(totalMinutes) {
+    const safeMinutes = Math.max(0, Number(totalMinutes) || 0);
+    const hours = Math.floor(safeMinutes / 60);
+    const minutes = safeMinutes % 60;
+    if (hours === 0) {
+      return `${minutes}m`;
+    }
+    return `${hours}h ${minutes}m`;
+  }
+
+  async handleAdminClockIn(message) {
+    const existingOpenSession = await AdminClockSession.findOne({
+      where: {
+        discordUserId: message.author.id,
+        clockOutAt: null,
+      },
+      order: [['clockInAt', 'DESC']],
+    });
+
+    if (existingOpenSession) {
+      return message.channel.send(
+        `⚠️ You are already clocked in since **${this.formatJakartaDateTime(existingOpenSession.clockInAt)} WIB**. Use \`${config.discord.prefix}clockout\` first.`
+      );
+    }
+
+    const now = new Date();
+    const displayName = message.member?.displayName || message.author.username;
+
+    try {
+      const session = await AdminClockSession.create({
+        discordUserId: message.author.id,
+        discordUsername: message.author.username,
+        discordDisplayName: displayName,
+        guildId: message.guild?.id || null,
+        clockInChannelId: message.channel?.id || null,
+        workDate: this.getJakartaDateOnly(now),
+        clockInAt: now,
+      });
+
+      return message.channel.send(
+        `✅ Clock-in saved for **${displayName}** at **${this.formatJakartaDateTime(session.clockInAt)} WIB** (work date: **${session.workDate}**).`
+      );
+    } catch (error) {
+      if (error?.name === 'SequelizeUniqueConstraintError') {
+        return message.channel.send(
+          `⚠️ You already have an active clock-in session. Use \`${config.discord.prefix}clockout\` first.`
+        );
+      }
+      throw error;
+    }
+  }
+
+  async handleAdminClockOut(message) {
+    const openSession = await AdminClockSession.findOne({
+      where: {
+        discordUserId: message.author.id,
+        clockOutAt: null,
+      },
+      order: [['clockInAt', 'DESC']],
+    });
+
+    if (!openSession) {
+      return message.channel.send(
+        `⚠️ No active clock-in found. Use \`${config.discord.prefix}clockin\` first.`
+      );
+    }
+
+    const clockOutAt = new Date();
+    const clockInAt = new Date(openSession.clockInAt);
+    const durationMinutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000));
+    const displayName = message.member?.displayName || message.author.username;
+
+    await openSession.update({
+      clockOutAt,
+      clockOutChannelId: message.channel?.id || null,
+      durationMinutes,
+      discordDisplayName: displayName,
+      discordUsername: message.author.username,
+    });
+
+    return message.channel.send(
+      `✅ Clock-out saved for **${displayName}** at **${this.formatJakartaDateTime(clockOutAt)} WIB**.\n` +
+      `⏱️ Duration: **${this.formatDurationMinutes(durationMinutes)}** (${durationMinutes} minutes)\n` +
+      `📅 Work date: **${openSession.workDate}**`
+    );
+  }
+
   setupEventListeners(rconClient, auctionLogMonitor = null) {
     // Set up RCON with auto-reconnect wrapper
     const wrappedRconClient = this.setupRconConnection(rconClient);
@@ -744,6 +855,34 @@ print(json.dumps(result, ensure_ascii=False))
         } catch (error) {
           console.error('Error in resetrepaircooldown:', error);
           return message.channel.send(`❌ Failed to execute resetrepaircooldown: ${error.message}`);
+        }
+      }
+
+      if (command === 'clockin') {
+        if (!isAdmin) {
+          return message.channel.send('❌ You need the @admin role to use this command.');
+        }
+
+        try {
+          await this.handleAdminClockIn(message);
+          return;
+        } catch (error) {
+          console.error('Error in !clockin:', error);
+          return message.channel.send(`❌ Failed to save clock-in: ${error.message}`);
+        }
+      }
+
+      if (command === 'clockout') {
+        if (!isAdmin) {
+          return message.channel.send('❌ You need the @admin role to use this command.');
+        }
+
+        try {
+          await this.handleAdminClockOut(message);
+          return;
+        } catch (error) {
+          console.error('Error in !clockout:', error);
+          return message.channel.send(`❌ Failed to save clock-out: ${error.message}`);
         }
       }
 
@@ -1410,6 +1549,8 @@ print(json.dumps(result, ensure_ascii=False))
         otherCommands += '**Admin Commands:**\n';
         otherCommands += `\`${prefix}adduser <username> <password>\` - Add a user to the whitelist (requires @admin role)\n`;
         otherCommands += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
+        otherCommands += `\`${prefix}clockin\` - Start your admin activity session (requires @admin role)\n`;
+        otherCommands += `\`${prefix}clockout\` - End your admin activity session and save duration (requires @admin role)\n`;
         otherCommands += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n`;
         otherCommands += `\`${prefix}cronstatus\` - Check cron job execution status (requires @admin/@developer role)\n`;
         otherCommands += `\`${prefix}testcron <supply|tank|both>\` - Manually test cron jobs (requires @admin/@developer role)\n\n`;
