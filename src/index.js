@@ -7,6 +7,7 @@ import { sequelize } from './models/index.js';
 import zmusersRouter from './api/routes/zmusers.js';
 import playerAuctionsRouter from './api/routes/playerAuctions.js';
 import virtualGarageRouter from './api/routes/virtualGarage.js';
+import fleaMarketRouter from './api/routes/fleaMarket.js';
 import authRouter from './api/routes/auth.js';
 import mapRouter from './api/routes/map.js';
 import path from 'path';
@@ -23,6 +24,7 @@ async function main() {
   app.use('/api/zmusers', zmusersRouter);
   app.use('/api/player-auctions', playerAuctionsRouter);
   app.use('/api/virtual-garage', virtualGarageRouter);
+  app.use('/api/flea-market', fleaMarketRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/map', mapRouter);
 
@@ -30,6 +32,7 @@ async function main() {
   app.use('/zmusers', zmusersRouter);
   app.use('/player-auctions', playerAuctionsRouter);
   app.use('/virtual-garage', virtualGarageRouter);
+  app.use('/flea-market', fleaMarketRouter);
   app.use('/auth', authRouter);
   app.use('/map', mapRouter);
 

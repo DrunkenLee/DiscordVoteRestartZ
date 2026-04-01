@@ -4,6 +4,7 @@ import { sequelize } from '../models/index.js';
 import zmusersRouter from './routes/zmusers.js';
 import playerAuctionsRouter from './routes/playerAuctions.js';
 import virtualGarageRouter from './routes/virtualGarage.js';
+import fleaMarketRouter from './routes/fleaMarket.js';
 import logger from '../utils/logger.js';
 
 dotenv.config();
@@ -14,6 +15,7 @@ app.use(express.json());
 app.use('/zmusers', zmusersRouter);
 app.use('/player-auctions', playerAuctionsRouter);
 app.use('/virtual-garage', virtualGarageRouter);
+app.use('/flea-market', fleaMarketRouter);
 
 const PORT = process.env.PORT || 3000;
 const DB_TARGET = process.env.DB_TARGET || '(unset)';
