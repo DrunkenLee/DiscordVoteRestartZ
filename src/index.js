@@ -6,6 +6,7 @@ import cors from 'cors';
 import { sequelize } from './models/index.js';
 import zmusersRouter from './api/routes/zmusers.js';
 import playerAuctionsRouter from './api/routes/playerAuctions.js';
+import virtualGarageRouter from './api/routes/virtualGarage.js';
 import authRouter from './api/routes/auth.js';
 import mapRouter from './api/routes/map.js';
 import path from 'path';
@@ -20,12 +21,14 @@ async function main() {
   // API routes (prefixed with /api)
   app.use('/api/zmusers', zmusersRouter);
   app.use('/api/player-auctions', playerAuctionsRouter);
+  app.use('/api/virtual-garage', virtualGarageRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/map', mapRouter);
 
   // Legacy (non-prefixed) routes for backward compatibility
   app.use('/zmusers', zmusersRouter);
   app.use('/player-auctions', playerAuctionsRouter);
+  app.use('/virtual-garage', virtualGarageRouter);
   app.use('/auth', authRouter);
   app.use('/map', mapRouter);
 

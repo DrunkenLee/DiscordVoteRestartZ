@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { sequelize } from '../models/index.js';
 import zmusersRouter from './routes/zmusers.js';
 import playerAuctionsRouter from './routes/playerAuctions.js';
+import virtualGarageRouter from './routes/virtualGarage.js';
 
 dotenv.config();
 
@@ -11,6 +12,7 @@ app.use(express.json());
 
 app.use('/zmusers', zmusersRouter);
 app.use('/player-auctions', playerAuctionsRouter);
+app.use('/virtual-garage', virtualGarageRouter);
 
 const PORT = process.env.PORT || 3000;
 
