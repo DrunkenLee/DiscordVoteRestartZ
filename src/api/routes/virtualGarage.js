@@ -1,10 +1,66 @@
 import express from 'express';
 import { VirtualGarageSnapshot } from '../../models/virtualGarageSnapshot.js';
+import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
 const ALLOWED_STATUSES = new Set(['active', 'restored', 'deleted']);
 const SORT_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'savedTime', 'vehicleId', 'status']);
+
+function generateRequestId() {
+  return `vg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function summarizePayload(payload) {
+  if (!payload || typeof payload !== 'object') return {};
+
+  const snapshot = payload.snapshot && typeof payload.snapshot === 'object' ? payload.snapshot : null;
+
+  return {
+    filePath: payload.filePath,
+    ownerUsername: payload.ownerUsername,
+    ownerSteamId: payload.ownerSteamId,
+    vehicleId: payload.vehicleId,
+    vehicleName: payload.vehicleName,
+    scriptName: payload.scriptName,
+    status: payload.status,
+    sourceServer: payload.sourceServer,
+    hasSnapshot: payload.snapshot !== undefined,
+    hasSummary: payload.summary !== undefined,
+    snapshotPartsCount: Array.isArray(snapshot?.parts) ? snapshot.parts.length : 0,
+    snapshotKeys: snapshot ? Object.keys(snapshot).slice(0, 12) : []
+  };
+}
+
+function requestContext(req) {
+  return {
+    requestId: req.vgRequestId,
+    method: req.method,
+    path: req.originalUrl,
+    ip: req.ip
+  };
+}
+
+router.use((req, res, next) => {
+  req.vgRequestId = generateRequestId();
+  const startedAt = Date.now();
+
+  logger.info('virtual-garage request start', {
+    ...requestContext(req),
+    query: req.query || {},
+    body: summarizePayload(req.body)
+  });
+
+  res.on('finish', () => {
+    logger.info('virtual-garage request end', {
+      ...requestContext(req),
+      statusCode: res.statusCode,
+      durationMs: Date.now() - startedAt
+    });
+  });
+
+  next();
+});
 
 function normalizeText(value) {
   if (value === undefined || value === null) return null;
@@ -183,9 +239,20 @@ router.get('/', async (req, res) => {
     if (offset !== null && offset !== undefined) options.offset = Math.max(0, offset);
 
     const rows = await VirtualGarageSnapshot.findAll(options);
+    logger.info('virtual-garage list success', {
+      ...requestContext(req),
+      count: rows.length,
+      filters: where,
+      sort,
+      order
+    });
     res.json(rows.map((row) => sanitizeListRecord(row, includeSnapshot)));
   } catch (err) {
-    console.error('Error listing virtual garage snapshots:', err);
+    logger.error('virtual-garage list failed', {
+      ...requestContext(req),
+      error: err.message,
+      stack: err.stack
+    });
     res.status(500).json({ error: err.message });
   }
 });
@@ -203,9 +270,18 @@ router.get('/owner/:ownerUsername', async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
+    logger.info('virtual-garage owner list success', {
+      ...requestContext(req),
+      ownerUsername,
+      count: rows.length
+    });
     res.json(rows.map((row) => sanitizeListRecord(row, includeSnapshot)));
   } catch (err) {
-    console.error('Error fetching owner snapshots:', err);
+    logger.error('virtual-garage owner list failed', {
+      ...requestContext(req),
+      error: err.message,
+      stack: err.stack
+    });
     res.status(500).json({ error: err.message });
   }
 });
@@ -219,13 +295,26 @@ router.get('/by-file', async (req, res) => {
 
     const row = await VirtualGarageSnapshot.findOne({ where: { filePath } });
     if (!row) {
+      logger.info('virtual-garage by-file not found', {
+        ...requestContext(req),
+        filePath
+      });
       return res.sendStatus(404);
     }
 
     const includeSnapshot = req.query.includeSnapshot === 'true';
+    logger.info('virtual-garage by-file success', {
+      ...requestContext(req),
+      filePath,
+      id: row.id
+    });
     res.json(sanitizeListRecord(row, includeSnapshot));
   } catch (err) {
-    console.error('Error fetching snapshot by file:', err);
+    logger.error('virtual-garage by-file failed', {
+      ...requestContext(req),
+      error: err.message,
+      stack: err.stack
+    });
     res.status(500).json({ error: err.message });
   }
 });
@@ -236,9 +325,23 @@ router.post('/', async (req, res) => {
     applyStatusTimestamps(payload, payload.status);
 
     const created = await VirtualGarageSnapshot.create(payload);
+    logger.info('virtual-garage create success', {
+      ...requestContext(req),
+      id: created.id,
+      filePath: created.filePath,
+      ownerUsername: created.ownerUsername,
+      status: created.status
+    });
     res.status(201).json(created);
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
+    logger.error('virtual-garage create failed', {
+      ...requestContext(req),
+      error: err.message,
+      statusCode,
+      body: summarizePayload(req.body),
+      stack: err.stack
+    });
     res.status(statusCode).json({ error: err.message });
   }
 });
@@ -254,13 +357,34 @@ router.post('/upsert', async (req, res) => {
 
     if (!existing) {
       const created = await VirtualGarageSnapshot.create(payload);
+      logger.info('virtual-garage upsert created', {
+        ...requestContext(req),
+        id: created.id,
+        filePath: created.filePath,
+        ownerUsername: created.ownerUsername,
+        status: created.status
+      });
       return res.status(201).json(created);
     }
 
     await existing.update(payload);
+    logger.info('virtual-garage upsert updated', {
+      ...requestContext(req),
+      id: existing.id,
+      filePath: existing.filePath,
+      ownerUsername: existing.ownerUsername,
+      status: existing.status
+    });
     res.json(existing);
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
+    logger.error('virtual-garage upsert failed', {
+      ...requestContext(req),
+      error: err.message,
+      statusCode,
+      body: summarizePayload(req.body),
+      stack: err.stack
+    });
     res.status(statusCode).json({ error: err.message });
   }
 });
@@ -303,13 +427,32 @@ router.patch('/by-file/status', async (req, res) => {
         restoredAt: payload.restoredAt ?? null,
         deletedAt: payload.deletedAt ?? null
       });
+      logger.info('virtual-garage status-by-file created', {
+        ...requestContext(req),
+        id: row.id,
+        filePath: row.filePath,
+        ownerUsername: row.ownerUsername,
+        status: row.status
+      });
       return res.status(201).json(row);
     }
 
     await row.update(payload);
+    logger.info('virtual-garage status-by-file updated', {
+      ...requestContext(req),
+      id: row.id,
+      filePath: row.filePath,
+      ownerUsername: row.ownerUsername,
+      status: row.status
+    });
     res.json(row);
   } catch (err) {
-    console.error('Error updating snapshot status by file:', err);
+    logger.error('virtual-garage status-by-file failed', {
+      ...requestContext(req),
+      error: err.message,
+      body: summarizePayload(req.body),
+      stack: err.stack
+    });
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
     res.status(statusCode).json({ error: err.message });
   }
@@ -324,13 +467,25 @@ router.get('/:id', async (req, res) => {
 
     const row = await VirtualGarageSnapshot.findByPk(id);
     if (!row) {
+      logger.info('virtual-garage get-by-id not found', {
+        ...requestContext(req),
+        id
+      });
       return res.sendStatus(404);
     }
 
     const includeSnapshot = req.query.includeSnapshot === 'true';
+    logger.info('virtual-garage get-by-id success', {
+      ...requestContext(req),
+      id
+    });
     res.json(sanitizeListRecord(row, includeSnapshot));
   } catch (err) {
-    console.error('Error fetching snapshot by id:', err);
+    logger.error('virtual-garage get-by-id failed', {
+      ...requestContext(req),
+      error: err.message,
+      stack: err.stack
+    });
     res.status(500).json({ error: err.message });
   }
 });
@@ -349,13 +504,29 @@ router.put('/:id', async (req, res) => {
 
     const row = await VirtualGarageSnapshot.findByPk(id);
     if (!row) {
+      logger.info('virtual-garage update-by-id not found', {
+        ...requestContext(req),
+        id
+      });
       return res.sendStatus(404);
     }
 
     await row.update(payload);
+    logger.info('virtual-garage update-by-id success', {
+      ...requestContext(req),
+      id: row.id,
+      filePath: row.filePath,
+      ownerUsername: row.ownerUsername,
+      status: row.status
+    });
     res.json(row);
   } catch (err) {
-    console.error('Error updating snapshot by id:', err);
+    logger.error('virtual-garage update-by-id failed', {
+      ...requestContext(req),
+      error: err.message,
+      body: summarizePayload(req.body),
+      stack: err.stack
+    });
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
     res.status(statusCode).json({ error: err.message });
   }
@@ -370,12 +541,24 @@ router.delete('/by-file', async (req, res) => {
 
     const deleted = await VirtualGarageSnapshot.destroy({ where: { filePath } });
     if (!deleted) {
+      logger.info('virtual-garage delete-by-file not found', {
+        ...requestContext(req),
+        filePath
+      });
       return res.sendStatus(404);
     }
 
+    logger.info('virtual-garage delete-by-file success', {
+      ...requestContext(req),
+      filePath
+    });
     res.sendStatus(204);
   } catch (err) {
-    console.error('Error deleting snapshot by file:', err);
+    logger.error('virtual-garage delete-by-file failed', {
+      ...requestContext(req),
+      error: err.message,
+      stack: err.stack
+    });
     res.status(500).json({ error: err.message });
   }
 });
@@ -389,15 +572,26 @@ router.delete('/:id', async (req, res) => {
 
     const deleted = await VirtualGarageSnapshot.destroy({ where: { id } });
     if (!deleted) {
+      logger.info('virtual-garage delete-by-id not found', {
+        ...requestContext(req),
+        id
+      });
       return res.sendStatus(404);
     }
 
+    logger.info('virtual-garage delete-by-id success', {
+      ...requestContext(req),
+      id
+    });
     res.sendStatus(204);
   } catch (err) {
-    console.error('Error deleting snapshot by id:', err);
+    logger.error('virtual-garage delete-by-id failed', {
+      ...requestContext(req),
+      error: err.message,
+      stack: err.stack
+    });
     res.status(500).json({ error: err.message });
   }
 });
 
 export default router;
-

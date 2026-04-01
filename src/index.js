@@ -11,6 +11,7 @@ import authRouter from './api/routes/auth.js';
 import mapRouter from './api/routes/map.js';
 import path from 'path';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
+import logger from './utils/logger.js';
 
 async function main() {
   // Initialize Express API server
@@ -38,6 +39,7 @@ async function main() {
 
   const PORT = process.env.PORT || 3000;
   const API_ONLY = process.env.API_ONLY === 'true';
+  const DB_TARGET = process.env.DB_TARGET || '(unset)';
 
   const discordBot = new DiscordBot(config.discord.token);
   let rconClient = new RconClient(config.rcon.host, config.rcon.port, config.rcon.password);
@@ -49,6 +51,7 @@ async function main() {
     // Start API server first to allow API_ONLY mode quickly
     app.listen(PORT, () => {
       console.log(`API server running on port ${PORT}`);
+      logger.info('api server listening', { port: Number(PORT), apiOnly: API_ONLY, dbTarget: DB_TARGET });
     });
 
     if (API_ONLY) {
@@ -61,9 +64,11 @@ async function main() {
     try {
       await sequelize.authenticate();
       console.log('Database connected successfully.');
+      logger.info('database connected', { dbTarget: DB_TARGET });
     } catch (dbError) {
       console.error('Database connection failed:', dbError.message);
       console.log('Bot will continue without database. Some features may be limited.');
+      logger.error('database connection failed', { dbTarget: DB_TARGET, error: dbError.message });
     }
 
     // continue with Discord/RCON init when not API_ONLY
