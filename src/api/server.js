@@ -6,11 +6,13 @@ import playerAuctionsRouter from './routes/playerAuctions.js';
 import virtualGarageRouter from './routes/virtualGarage.js';
 import fleaMarketRouter from './routes/fleaMarket.js';
 import logger from '../utils/logger.js';
+import { apiRequestAuditLog } from './middleware/requestAuditLog.js';
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
+app.use(apiRequestAuditLog);
 
 app.use('/zmusers', zmusersRouter);
 app.use('/player-auctions', playerAuctionsRouter);

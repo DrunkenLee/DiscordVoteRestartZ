@@ -105,7 +105,17 @@ export class SftpLogReader {
           }
         }
 
-        await this.sftp.put(Buffer.from(String(content ?? ''), 'utf8'), targetPath);
+        const payload = Buffer.from(String(content ?? ''), 'utf8');
+        const tempPath = `${targetPath}.tmp`;
+
+        await this.sftp.put(payload, tempPath);
+        try {
+          await this.sftp.rename(tempPath, targetPath);
+        } catch {
+          await this.sftp.put(payload, targetPath);
+          try { await this.sftp.delete(tempPath); } catch {}
+        }
+
         return true;
       } catch (error) {
         console.error('[SftpLogReader] writeTextFile error:', error);

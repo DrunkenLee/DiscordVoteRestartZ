@@ -73,8 +73,10 @@ async function writePublicListingsCache(listings, req) {
   const cacheMode = useDevPath ? 'dev' : 'live';
 
   if (useDevPath) {
+    const tmpPath = `${targetPath}.tmp`;
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(targetPath, payload, 'utf8');
+    await fs.writeFile(tmpPath, payload, 'utf8');
+    await fs.rename(tmpPath, targetPath);
   } else {
     await fleaMarketCacheSftp.writeTextFile(targetPath, payload, { ensureDir: true });
   }

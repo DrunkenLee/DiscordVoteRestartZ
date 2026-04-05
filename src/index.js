@@ -12,13 +12,16 @@ import authRouter from './api/routes/auth.js';
 import mapRouter from './api/routes/map.js';
 import path from 'path';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
+import { NodeApiQueueProcessor } from './services/nodeApiQueueProcessor.js';
 import logger from './utils/logger.js';
+import { apiRequestAuditLog } from './api/middleware/requestAuditLog.js';
 
 async function main() {
   // Initialize Express API server
   const app = express();
   app.use(cors());
   app.use(express.json());
+  app.use(apiRequestAuditLog);
 
   // API routes (prefixed with /api)
   app.use('/api/zmusers', zmusersRouter);
@@ -43,12 +46,15 @@ async function main() {
   const PORT = process.env.PORT || 3000;
   const API_ONLY = process.env.API_ONLY === 'true';
   const DB_TARGET = process.env.DB_TARGET || '(unset)';
+  const auctionLogMonitorEnv = String(process.env.AUCTION_LOG_MONITOR_ENABLED ?? 'true').trim().toLowerCase();
+  const AUCTION_LOG_MONITOR_ENABLED = !['0', 'false', 'no', 'off'].includes(auctionLogMonitorEnv);
 
   const discordBot = new DiscordBot(config.discord.token);
   let rconClient = new RconClient(config.rcon.host, config.rcon.port, config.rcon.password);
+  const nodeApiQueueProcessor = new NodeApiQueueProcessor();
 
   // Pass Discord client to auction monitor for notifications
-  const auctionLogMonitor = new AuctionLogMonitor(discordBot.client);
+  const auctionLogMonitor = AUCTION_LOG_MONITOR_ENABLED ? new AuctionLogMonitor(discordBot.client) : null;
 
   try {
     // Start API server first to allow API_ONLY mode quickly
@@ -56,6 +62,7 @@ async function main() {
       console.log(`API server running on port ${PORT}`);
       logger.info('api server listening', { port: Number(PORT), apiOnly: API_ONLY, dbTarget: DB_TARGET });
     });
+    nodeApiQueueProcessor.start();
 
     if (API_ONLY) {
       console.log('API_ONLY mode enabled. Skipping database, Discord bot, RCON, and auction monitor.');
@@ -96,13 +103,18 @@ async function main() {
     discordBot.setupEventListeners(rconClient, auctionLogMonitor);
 
     // Start auction log monitoring (non-blocking)
-    console.log('Starting auction log monitoring...');
-    try {
-      await auctionLogMonitor.start();
-      console.log('Auction log monitoring started successfully.');
-    } catch (monitorError) {
-      console.error('Auction monitor failed to start:', monitorError.message);
-      console.log('Bot will continue without auction monitoring.');
+    if (auctionLogMonitor) {
+      console.log('Starting auction log monitoring...');
+      try {
+        await auctionLogMonitor.start();
+        console.log('Auction log monitoring started successfully.');
+      } catch (monitorError) {
+        console.error('Auction monitor failed to start:', monitorError.message);
+        console.log('Bot will continue without auction monitoring.');
+      }
+    } else {
+      console.log('Auction log monitoring disabled by AUCTION_LOG_MONITOR_ENABLED=false.');
+      logger.info('auction log monitoring disabled by env');
     }
 
     // Handle graceful shutdown
@@ -110,7 +122,10 @@ async function main() {
       console.log('Shutting down...');
 
       // Stop auction monitoring
-      auctionLogMonitor.stop();
+      if (auctionLogMonitor) {
+        auctionLogMonitor.stop();
+      }
+      nodeApiQueueProcessor.stop();
 
       discordBot.cleanup();
       process.exit(0);
