@@ -1,4 +1,5 @@
 import SftpClient from 'ssh2-sftp-client';
+import path from 'path';
 import config from '../config/config.js';
 
 export class SftpLogReader {
@@ -72,6 +73,47 @@ export class SftpLogReader {
       // Mark this operation as complete
       resolver();
     }
+  }
+
+  /**
+   * Write UTF-8 text content to a remote file path.
+   * @param {string} remotePath
+   * @param {string} content
+   * @param {{ ensureDir?: boolean }} options
+   * @returns {Promise<boolean>}
+   */
+  async writeTextFile(remotePath, content, options = {}) {
+    const targetPath = typeof remotePath === 'string' ? remotePath.trim() : '';
+    if (!targetPath) {
+      throw new Error('remotePath is required');
+    }
+
+    const ensureDir = options?.ensureDir !== false;
+
+    return this.executeWithQueue(async () => {
+      try {
+        await this.connect();
+
+        if (ensureDir) {
+          const remoteDir = path.posix.dirname(targetPath);
+          if (remoteDir && remoteDir !== '.' && remoteDir !== '/') {
+            try {
+              await this.sftp.stat(remoteDir);
+            } catch {
+              await this.sftp.mkdir(remoteDir, true);
+            }
+          }
+        }
+
+        await this.sftp.put(Buffer.from(String(content ?? ''), 'utf8'), targetPath);
+        return true;
+      } catch (error) {
+        console.error('[SftpLogReader] writeTextFile error:', error);
+        throw error;
+      } finally {
+        await this.disconnect();
+      }
+    });
   }
 
   async findLatestLogFile() {

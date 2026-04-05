@@ -1,7 +1,10 @@
 import express from 'express';
+import fs from 'fs/promises';
+import path from 'path';
 import { sequelize } from '../../models/index.js';
 import { FleaMarketListing } from '../../models/fleaMarketListing.js';
 import { FleaMarketAccount } from '../../models/fleaMarketAccount.js';
+import { SftpLogReader } from '../../utils/sftpLogReader.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -19,6 +22,72 @@ const LISTING_SORT_FIELDS = new Set([
   'total',
   'status'
 ]);
+
+const DEV_PUBLIC_LISTINGS_PATH = process.env.FLEA_MARKET_PUBLIC_LISTINGS_DEV_PATH
+  || 'C:\\Users\\Michael\\Zomboid\\Lua\\ZMFleaMarket\\ZMFleaMarket_public_listings.json';
+const LIVE_PUBLIC_LISTINGS_PATH = process.env.FLEA_MARKET_PUBLIC_LISTINGS_REMOTE_PATH
+  || '/home/pzserver/Zomboid/Lua/ZMFleaMarket/ZMFleaMarket_public_listings.json';
+const PUBLIC_CACHE_MAX_ITEMS = resolvePublicCacheMaxItems();
+
+const fleaMarketCacheSftp = new SftpLogReader();
+
+function resolvePublicCacheMaxItems() {
+  const parsed = Number.parseInt(process.env.FLEA_MARKET_PUBLIC_CACHE_MAX_ITEMS || '100', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 100;
+  return parsed;
+}
+
+function isDevCacheMode() {
+  const explicitMode = normalizeText(process.env.FLEA_MARKET_CACHE_MODE);
+  if (explicitMode) {
+    const mode = explicitMode.toLowerCase();
+    if (mode === 'dev' || mode === 'development' || mode === 'local') return true;
+    if (mode === 'live' || mode === 'prod' || mode === 'production') return false;
+  }
+
+  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+  if (nodeEnv === 'development') return true;
+  if (nodeEnv === 'production') return false;
+
+  return process.platform === 'win32';
+}
+
+function buildPublicListingsCacheSnapshot(listings) {
+  const rows = Array.isArray(listings) ? listings : [];
+  const limitedRows = rows.slice(0, PUBLIC_CACHE_MAX_ITEMS);
+  return {
+    listings: limitedRows,
+    updatedAt: Date.now(),
+    updatedAtIso: new Date().toISOString(),
+    total: rows.length,
+    count: limitedRows.length,
+    maxItems: PUBLIC_CACHE_MAX_ITEMS
+  };
+}
+
+async function writePublicListingsCache(listings, req) {
+  const snapshot = buildPublicListingsCacheSnapshot(listings);
+  const payload = JSON.stringify(snapshot, null, 2);
+  const useDevPath = isDevCacheMode();
+  const targetPath = useDevPath ? DEV_PUBLIC_LISTINGS_PATH : LIVE_PUBLIC_LISTINGS_PATH;
+  const cacheMode = useDevPath ? 'dev' : 'live';
+
+  if (useDevPath) {
+    await fs.mkdir(path.dirname(targetPath), { recursive: true });
+    await fs.writeFile(targetPath, payload, 'utf8');
+  } else {
+    await fleaMarketCacheSftp.writeTextFile(targetPath, payload, { ensureDir: true });
+  }
+
+  logger.info('flea-market public cache updated', {
+    ...requestContext(req),
+    cacheMode,
+    cachePath: targetPath,
+    count: snapshot.count,
+    total: snapshot.total,
+    maxItems: snapshot.maxItems
+  });
+}
 
 function generateRequestId() {
   return `fm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -277,6 +346,35 @@ router.use((req, res, next) => {
   next();
 });
 
+router.get('/', async (_req, res) => {
+  res.json({
+    service: 'flea-market',
+    ok: true,
+    routes: {
+      listings: [
+        'GET /listings',
+        'GET /listings/:id',
+        'POST /listings',
+        'PUT /listings/:id',
+        'POST /listings/upsert',
+        'POST /listings/bulk-upsert',
+        'DELETE /listings/:id'
+      ],
+      accounts: [
+        'GET /accounts',
+        'GET /accounts/:username',
+        'PUT /accounts/:username',
+        'POST /accounts/upsert',
+        'POST /accounts/bulk-upsert',
+        'DELETE /accounts/:username'
+      ],
+      sync: [
+        'POST /sync'
+      ]
+    }
+  });
+});
+
 router.get('/listings', async (req, res) => {
   try {
     const where = {};
@@ -305,7 +403,20 @@ router.get('/listings', async (req, res) => {
     if (offset !== undefined && offset !== null) options.offset = offset;
 
     const rows = await FleaMarketListing.findAll(options);
-    res.json(rows.map((row) => sanitizeListing(row, { includeItemData, includeScriptStats })));
+    const responseRows = rows.map((row) => sanitizeListing(row, { includeItemData, includeScriptStats }));
+    const cacheRows = rows.map((row) => sanitizeListing(row, { includeItemData: true, includeScriptStats: true }));
+
+    try {
+      await writePublicListingsCache(cacheRows, req);
+    } catch (cacheError) {
+      logger.error('flea-market public cache write failed', {
+        ...requestContext(req),
+        error: cacheError.message,
+        stack: cacheError.stack
+      });
+    }
+
+    res.json(responseRows);
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
     logger.error('flea-market list listings failed', {
@@ -626,4 +737,3 @@ router.post('/sync', async (req, res) => {
 });
 
 export default router;
-
