@@ -78,9 +78,17 @@ function normalizeBaseUrl(value) {
 
 function shouldUseDefaultFleaFallback(entry) {
   const sourceModule = trimText(entry?.sourceModule);
-  const queueTag = trimText(entry?.queueTag);
-  const method = trimText(entry?.method).toUpperCase();
-  return sourceModule === 'ZMFleaMarket' && method === 'GET' && queueTag === 'flea_public_listings_refresh';
+  if (sourceModule !== 'ZMFleaMarket') return false;
+
+  const queueTag = trimText(entry?.queueTag).toLowerCase();
+  const targetUrl = trimText(entry?.url).toLowerCase();
+  if (targetUrl.includes('/api/flea-market/')) {
+    return true;
+  }
+
+  return queueTag === 'flea_public_listings_refresh'
+    || queueTag === 'flea_market_sync'
+    || queueTag === 'flea_sell_listing';
 }
 
 function buildAttemptUrls(entry) {

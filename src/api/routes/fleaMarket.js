@@ -191,6 +191,23 @@ function sanitizeAccount(row) {
   return row.toJSON();
 }
 
+async function refreshPublicListingsCacheSafe(req, reason = 'unknown') {
+  try {
+    const rows = await FleaMarketListing.findAll({
+      order: [['createdAt', 'DESC']]
+    });
+    const cacheRows = rows.map((row) => sanitizeListing(row, { includeItemData: true, includeScriptStats: true }));
+    await writePublicListingsCache(cacheRows, req);
+  } catch (cacheError) {
+    logger.error('flea-market public cache write failed', {
+      ...requestContext(req),
+      reason,
+      error: cacheError.message,
+      stack: cacheError.stack
+    });
+  }
+}
+
 function buildListingPayload(body, { requireCreateFields = false } = {}) {
   const payload = {};
 
@@ -355,7 +372,9 @@ router.get('/', async (_req, res) => {
     routes: {
       listings: [
         'GET /listings',
+        'GET /my-listings?seller=<username>',
         'GET /listings/:id',
+        'POST /sell',
         'POST /listings',
         'PUT /listings/:id',
         'POST /listings/upsert',
@@ -449,10 +468,67 @@ router.get('/listings/:id', async (req, res) => {
   }
 });
 
+router.get('/my-listings', async (req, res) => {
+  try {
+    const seller = normalizeText(req.query.seller || req.query.username);
+    if (!seller) {
+      return res.status(400).json({ error: 'seller is required' });
+    }
+
+    const includeItemData = req.query.includeItemData === 'true';
+    const includeScriptStats = req.query.includeScriptStats === 'true';
+    const includeInactive = req.query.includeInactive !== 'false';
+    const limit = parseInteger(req.query.limit, 'limit', { allowNull: true, min: 1 });
+    const offset = parseInteger(req.query.offset, 'offset', { allowNull: true, min: 0 });
+
+    const where = { seller };
+    if (!includeInactive) {
+      where.status = 'active';
+    }
+
+    const options = {
+      where,
+      order: [['createdAt', 'DESC']]
+    };
+    if (limit !== undefined && limit !== null) options.limit = limit;
+    if (offset !== undefined && offset !== null) options.offset = offset;
+
+    const rows = await FleaMarketListing.findAll(options);
+    res.json(rows.map((row) => sanitizeListing(row, { includeItemData, includeScriptStats })));
+  } catch (err) {
+    const statusCode = /required|must be/.test(err.message) ? 400 : 500;
+    logger.error('flea-market my listings failed', {
+      ...requestContext(req),
+      error: err.message,
+      stack: err.stack
+    });
+    res.status(statusCode).json({ error: err.message });
+  }
+});
+
+router.post('/sell', async (req, res) => {
+  try {
+    const payload = buildListingPayload(req.body || {}, { requireCreateFields: true });
+    const { row, created } = await upsertListing(payload, null);
+    await refreshPublicListingsCacheSafe(req, 'sell');
+    res.status(created ? 201 : 200).json(row);
+  } catch (err) {
+    const statusCode = /required|must be/.test(err.message) ? 400 : 500;
+    logger.error('flea-market sell failed', {
+      ...requestContext(req),
+      error: err.message,
+      body: summarizeBody(req.body),
+      stack: err.stack
+    });
+    res.status(statusCode).json({ error: err.message });
+  }
+});
+
 router.post('/listings', async (req, res) => {
   try {
     const payload = buildListingPayload(req.body || {}, { requireCreateFields: true });
     const created = await FleaMarketListing.create(payload);
+    await refreshPublicListingsCacheSafe(req, 'create_listing');
     res.status(201).json(created);
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
@@ -475,6 +551,7 @@ router.put('/listings/:id', async (req, res) => {
     const row = await FleaMarketListing.findByPk(id);
     if (!row) return res.sendStatus(404);
     await row.update(payload);
+    await refreshPublicListingsCacheSafe(req, 'update_listing');
     res.json(row);
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
@@ -492,6 +569,7 @@ router.post('/listings/upsert', async (req, res) => {
   try {
     const payload = buildListingPayload(req.body || {}, { requireCreateFields: true });
     const { row, created } = await upsertListing(payload, null);
+    await refreshPublicListingsCacheSafe(req, 'upsert_listing');
     res.status(created ? 201 : 200).json(row);
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
@@ -526,6 +604,8 @@ router.post('/listings/bulk-upsert', async (req, res) => {
       return out;
     });
 
+    await refreshPublicListingsCacheSafe(req, 'bulk_upsert_listings');
+
     res.json({
       count: rows.length,
       createdCount: createdIds.length,
@@ -549,6 +629,7 @@ router.delete('/listings/:id', async (req, res) => {
     const id = parseInteger(req.params.id, 'id', { allowNull: false, min: 1 });
     const deleted = await FleaMarketListing.destroy({ where: { id } });
     if (!deleted) return res.sendStatus(404);
+    await refreshPublicListingsCacheSafe(req, 'delete_listing');
     res.sendStatus(204);
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
@@ -718,6 +799,10 @@ router.post('/sync', async (req, res) => {
         accountUsernames: accounts
       };
     });
+
+    if (listingEntries.length > 0) {
+      await refreshPublicListingsCacheSafe(req, 'sync');
+    }
 
     res.json({
       ok: true,
