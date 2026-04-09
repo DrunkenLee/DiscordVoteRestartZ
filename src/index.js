@@ -18,9 +18,65 @@ import logger from './utils/logger.js';
 import { apiRequestAuditLog } from './api/middleware/requestAuditLog.js';
 
 async function main() {
+  const DEFAULT_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://zonamerahwebsite.web.app',
+    'https://zonamerahwebsite.firebaseapp.com',
+  ];
+  const configuredAllowedOrigins = String(process.env.CORS_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const allowedOrigins = new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredAllowedOrigins]);
+  const allowAnyOrigin = allowedOrigins.has('*');
+  const wildcardOrigins = [...allowedOrigins].filter((origin) => origin.includes('*'));
+
+  const isOriginAllowed = (origin) => {
+    if (!origin) return true; // non-browser requests may not send Origin
+    if (allowAnyOrigin || allowedOrigins.has(origin)) return true;
+
+    for (const wildcardOrigin of wildcardOrigins) {
+      const match = wildcardOrigin.match(/^(https?:\/\/)\*\.(.+)$/i);
+      if (!match) continue;
+
+      const [, protocol, domain] = match;
+      try {
+        const parsed = new URL(origin);
+        if (parsed.protocol === protocol && parsed.hostname.endsWith(`.${domain}`)) {
+          return true;
+        }
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
+  };
+
+  const corsOptionsDelegate = (req, callback) => {
+    const requestOrigin = req.get('Origin') || '';
+    const originAllowed = isOriginAllowed(requestOrigin);
+
+    callback(null, {
+      origin: originAllowed && requestOrigin ? requestOrigin : false,
+      credentials: true,
+      methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Authorization', 'Content-Type', 'Accept', 'Origin', 'X-Requested-With'],
+      exposedHeaders: ['Content-Length', 'Content-Type'],
+      maxAge: 86400,
+      optionsSuccessStatus: 204,
+    });
+  };
+
   // Initialize Express API server
   const app = express();
-  app.use(cors());
+  app.use((req, res, next) => {
+    res.header('Vary', 'Origin');
+    next();
+  });
+  app.use(cors(corsOptionsDelegate));
+  app.options('*', cors(corsOptionsDelegate));
   app.use(express.json());
   app.use(apiRequestAuditLog);
 
