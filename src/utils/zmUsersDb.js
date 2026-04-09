@@ -43,6 +43,18 @@ export async function findUsersByDiscordId(discordId) {
   return result.rows || [];
 }
 
+export async function findUserByUsername(username) {
+  const result = await pool.query(
+    `SELECT *
+     FROM public.zmusers
+     WHERE lower(username1) = lower($1)
+        OR lower(username2) = lower($1)
+     LIMIT 1`,
+    [username]
+  );
+  return result.rows[0] || null;
+}
+
 // Example: Add user
 export async function addUser(userData) {
   const { discordid, steamid, ownerid, username1, password1, username2, password2, extradata } = userData;

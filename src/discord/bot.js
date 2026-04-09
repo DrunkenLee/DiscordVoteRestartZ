@@ -17,6 +17,8 @@ import { BotLuaCommandManager } from './bot_luacmd.js';
 import fs from 'fs/promises';
 import path from 'path';
 import logger from '../utils/logger.js';
+import { lookupWhitelistUserByUsername } from '../services/whitelistDbLookup.js';
+import { registerWhitelistUserCredentials } from '../services/authRegistration.js';
 // Toggle for verbose getUserPoints debug logging
 const ENABLE_POINTS_DEBUG = false;
 
@@ -1786,6 +1788,7 @@ print(json.dumps(result, ensure_ascii=False))
         let whitelistCommands = '**Whitelist Commands:**\n';
         whitelistCommands += `\`${prefix}whitelistme\` - Auto-sync your whitelist data using your Discord name while you are online in-game.\n`;
         whitelistCommands += `\`${prefix}whitelistrequest <steamid> <username> <password>\` - Request to be whitelisted. Your Discord account and username must not already be registered. Your message will be deleted for security.\n`;
+        whitelistCommands += `\`${prefix}register <username> <password>\` - Link your Discord account with existing whitelist credentials for website login.\n`;
         whitelistCommands += `\`${prefix}resetpassword\` - Re-sync your whitelist account password from zmusers (no parameters).\n\n`;
         whitelistCommands += '**How to Whitelist:**\n';
         whitelistCommands += '0. Recommended: go online in-game using the same name as your Discord profile, then run `!whitelistme`.\n';
@@ -2111,6 +2114,8 @@ print(json.dumps(result, ensure_ascii=False))
           const playersDbRow = playersDbResult.row || null;
           const steamidFromDb = this.getFirstValueFromRecord(playersDbRow, ['steamid', 'steam_id', 'steamid64', 'steamid32']);
           const owneridFromDb = this.getFirstValueFromRecord(playersDbRow, ['ownerid', 'owner_id']);
+          const whitelistLookup = await lookupWhitelistUserByUsername(matchedUsername);
+          const whitelistUserExists = Boolean(whitelistLookup.found);
 
           const existingUser = await ZMUser.findOne({
             where: {
@@ -2147,6 +2152,14 @@ print(json.dumps(result, ensure_ascii=False))
               usernameColumn: playersDbResult.usernameColumn || null,
               row: playersDbRow,
             },
+            whitelistDb: {
+              found: whitelistUserExists,
+              dbPath: whitelistLookup.metadata?.dbPath || null,
+              table: whitelistLookup.metadata?.table || null,
+              usernameColumn: whitelistLookup.metadata?.usernameColumn || null,
+              passwordColumn: whitelistLookup.metadata?.passwordColumn || null,
+              lookupError: whitelistLookup.error || null,
+            },
             whitelistme: {
               ...existingWhitelistMeData,
               lastSyncedAt: nowIso,
@@ -2182,7 +2195,7 @@ print(json.dumps(result, ensure_ascii=False))
           }
 
           let adduserExecuted = false;
-          if (!playersDbResult.found) {
+          if (!whitelistUserExists) {
             await wrappedRconClient.send(`adduser ${this.quoteRconArg(matchedUsername)}`);
             adduserExecuted = true;
           }
@@ -2209,10 +2222,55 @@ print(json.dumps(result, ensure_ascii=False))
             }
           }
 
-          return message.channel.send(`Whitelist sync complete for ${matchedUsername}.\nnow you can use  !resetpassword`);
+          return message.channel.send(`Whitelist sync complete for ${matchedUsername}.\nNext step: use \`!register ${matchedUsername} <password>\` to link website login.`);
         } catch (error) {
           console.error('Error in !whitelistme:', error);
           return message.channel.send(`Error processing whitelist sync: ${error.message}`);
+        }
+      } else if (command === 'register') {
+        if (args.length < 2) {
+          try {
+            if (message.deletable) await message.delete();
+          } catch (e) {
+            console.error('Failed to delete !register message:', e);
+          }
+          return message.channel.send('❌ Missing arguments! Usage: `!register <username> <password>`');
+        }
+
+        const password = args[args.length - 1];
+        const username = args.slice(0, -1).join(' ').trim();
+
+        if (!username || !password) {
+          try {
+            if (message.deletable) await message.delete();
+          } catch (e) {
+            console.error('Failed to delete invalid !register message:', e);
+          }
+          return message.channel.send('❌ Invalid input! Usage: `!register <username> <password>`');
+        }
+
+        try {
+          if (message.deletable) await message.delete();
+        } catch (e) {
+          console.error('Failed to delete !register message with password:', e);
+        }
+
+        try {
+          const result = await registerWhitelistUserCredentials({
+            username,
+            password,
+            discordId: message.author.id,
+            discordTag: message.author.tag,
+          });
+
+          if (!result.ok) {
+            return message.channel.send(`❌ ${result.error}`);
+          }
+
+          return message.channel.send(`✅ Registration successful for **${username}**. You can now login on website pages.`);
+        } catch (error) {
+          console.error('Error in !register:', error);
+          return message.channel.send(`❌ Registration failed: ${error.message}`);
         }
       } else if (command === 'whitelistrequest') {
 

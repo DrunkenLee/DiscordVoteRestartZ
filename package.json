@@ -6,7 +6,10 @@
     "scripts": {
         "start": "node src/index.js",
         "test": "echo \"Error: no test specified\" && exit 1",
-        "scan:auction": "node scripts/manualAuctionScan.js"
+        "scan:auction": "node scripts/manualAuctionScan.js",
+        "monitor:accesslevel": "node scripts/setAccessLevelMonitor.js",
+        "db:migrate": "sequelize-cli db:migrate",
+        "db:migrate:undo": "sequelize-cli db:migrate:undo"
     },
     "keywords": [
         "Project Zomboid",
@@ -23,7 +26,9 @@
         "discord.js": "^14.0.0",
         "dotenv": "^10.0.0",
         "express": "^4.18.2",
+        "fs-extra": "^11.1.1",
         "jsonwebtoken": "^9.0.2",
+        "multer": "^2.1.1",
         "node-cron": "^3.0.3",
         "node-fetch": "^3.3.2",
         "openai": "^5.12.1",
@@ -33,9 +38,8 @@
         "sequelize": "^6.37.1",
         "ssh2": "^1.16.0",
         "ssh2-sftp-client": "^12.0.0",
+        "tar": "^7.5.7",
         "winston": "^3.17.0"
-        ,"tar": "^6.1.11",
-        "fs-extra": "^11.1.1"
     },
     "devDependencies": {
         "sequelize-cli": "^6.6.3"

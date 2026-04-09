@@ -10,6 +10,7 @@ import virtualGarageRouter from './api/routes/virtualGarage.js';
 import fleaMarketRouter from './api/routes/fleaMarket.js';
 import authRouter from './api/routes/auth.js';
 import mapRouter from './api/routes/map.js';
+import userDetailsRouter from './api/routes/userDetails.js';
 import path from 'path';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
 import { NodeApiQueueProcessor } from './services/nodeApiQueueProcessor.js';
@@ -30,6 +31,7 @@ async function main() {
   app.use('/api/flea-market', fleaMarketRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/map', mapRouter);
+  app.use('/api/user-details', userDetailsRouter);
 
   // Legacy (non-prefixed) routes for backward compatibility
   app.use('/zmusers', zmusersRouter);
@@ -38,10 +40,13 @@ async function main() {
   app.use('/flea-market', fleaMarketRouter);
   app.use('/auth', authRouter);
   app.use('/map', mapRouter);
+  app.use('/user-details', userDetailsRouter);
 
   // Serve static map assets (if present)
   const pzmapStatic = path.resolve(process.cwd(), 'public', 'pzmap');
   app.use('/pzmap', express.static(pzmapStatic));
+  const uploadsStatic = path.resolve(process.cwd(), 'public', 'uploads');
+  app.use('/uploads', express.static(uploadsStatic));
 
   const PORT = process.env.PORT || 3000;
   const API_ONLY = process.env.API_ONLY === 'true';
