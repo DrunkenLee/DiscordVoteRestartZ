@@ -121,7 +121,7 @@ function buildAttemptUrls(entry) {
   if (fallbackBases.length === 0 && shouldUseDefaultFleaFallback(entry)) {
     fallbackBases = [
       'http://127.0.0.1:3000',
-      'http://localhost:3000'
+      'https://api.zonamerah.pro'
     ];
   }
 
