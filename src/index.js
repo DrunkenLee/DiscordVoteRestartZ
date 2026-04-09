@@ -23,6 +23,7 @@ async function main() {
     'http://127.0.0.1:5173',
     'https://zonamerahwebsite.web.app',
     'https://zonamerahwebsite.firebaseapp.com',
+    'https://dev.zonamerah.pro',
   ];
   const configuredAllowedOrigins = String(process.env.CORS_ALLOWED_ORIGINS ?? '')
     .split(',')
