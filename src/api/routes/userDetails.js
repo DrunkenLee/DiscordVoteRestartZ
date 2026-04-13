@@ -266,6 +266,7 @@ router.post('/me/sync-game-status', requireAuthBearer, async (req, res) => {
         isOnline,
         matchedUsername: matchedUsername || null,
         playerCount: presenceResult.players.length,
+        source: presenceResult.source || null,
       },
     });
   } catch (error) {
