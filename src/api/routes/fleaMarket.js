@@ -36,6 +36,7 @@ const FLEA_WEB_BUY_CALLBACK_URL = normalizeText(process.env.FLEA_MARKET_WEB_BUY_
   || 'https://api.zonamerah.pro/api/flea-market/web-buy-callback';
 const FLEA_WEB_BUY_TIMEOUT_MS = resolveWebBuyTimeoutMs();
 const pendingWebBuyRequests = new Map();
+const inFlightWebBuyByUserListing = new Map();
 
 const fleaMarketCacheSftp = new SftpLogReader();
 
@@ -716,134 +717,153 @@ router.post('/buy', requireAuthBearer, async (req, res) => {
       return res.status(409).json({ error: 'Requested quantity is not available.', listingId });
     }
 
-    const presenceResult = await fetchOnlinePlayersViaSsh();
-    if (!presenceResult.ok) {
-      return res.status(502).json({
-        error: presenceResult.error || 'Failed to verify in-game online status.',
-      });
+    const inFlightKey = `${userId}:${listingId}`;
+    const existingInFlight = inFlightWebBuyByUserListing.get(inFlightKey);
+    if (existingInFlight) {
+      const ageMs = Date.now() - Number(existingInFlight.startedAt || 0);
+      if (Number.isFinite(ageMs) && ageMs < (FLEA_WEB_BUY_TIMEOUT_MS + 15000)) {
+        return res.status(429).json({
+          error: 'A buy request for this listing is already being processed. Please wait.',
+          listingId,
+        });
+      }
+      inFlightWebBuyByUserListing.delete(inFlightKey);
     }
 
-    const onlineSelection = resolveOnlineUsername(usernames, presenceResult.players, preferredUsername);
-    if (!onlineSelection.username) {
-      const reason = onlineSelection.reason === 'preferred_username_not_allowed'
-        ? 'Requested username is not linked to your account.'
-        : onlineSelection.reason === 'preferred_username_offline'
-          ? 'Requested username is currently offline in-game.'
-          : 'None of your linked usernames are currently online in-game.';
-      return res.status(409).json({
-        error: reason,
-        usernames,
-        onlinePlayers: presenceResult.players || [],
-      });
-    }
-
-    const resolvedUsername = onlineSelection.username;
-    if (normalizeText(listing.seller)?.toLowerCase() === resolvedUsername.toLowerCase()) {
-      return res.status(409).json({
-        error: 'Cannot buy your own listing.',
-        listingId,
-        username: resolvedUsername,
-      });
-    }
-
-    const requestId = generateWebBuyRequestId();
-    const callbackUrl = FLEA_WEB_BUY_CALLBACK_URL;
-    const targetArg = formatClientExeUsernameArg(resolvedUsername);
-    if (!targetArg) {
-      return res.status(400).json({ error: 'Resolved username is invalid for client executor dispatch.' });
-    }
-
-    const command = `luacmd clientexe ${targetArg} webfm_buy_listing ${quoteRconArg(requestId)} ${listingId} ${qty} ${quoteRconArg(callbackUrl)}`;
-    const waitForCallback = createPendingWebBuyRequest({
-      requestId,
-      listingId,
-      qty,
-      username: resolvedUsername,
-      userId,
-    });
+    inFlightWebBuyByUserListing.set(inFlightKey, { startedAt: Date.now() });
 
     try {
-      const rconResponse = await sendRconCommand(command);
-      logger.info('flea-market buy dispatched via clientexe', {
-        ...requestContext(req),
-        requestId,
-        listingId,
-        qty,
-        username: resolvedUsername,
-        callbackUrl,
-        commandPreview: command.slice(0, 280),
-        rconResponsePreview: String(rconResponse || '').slice(0, 280),
-      });
-    } catch (dispatchError) {
-      rejectPendingWebBuyRequest(requestId, dispatchError);
-      await waitForCallback.catch(() => {});
+      const presenceResult = await fetchOnlinePlayersViaSsh();
+      if (!presenceResult.ok) {
+        return res.status(502).json({
+          error: presenceResult.error || 'Failed to verify in-game online status.',
+        });
+      }
 
-      logger.error('flea-market buy dispatch failed', {
+      const onlineSelection = resolveOnlineUsername(usernames, presenceResult.players, preferredUsername);
+      if (!onlineSelection.username) {
+        const reason = onlineSelection.reason === 'preferred_username_not_allowed'
+          ? 'Requested username is not linked to your account.'
+          : onlineSelection.reason === 'preferred_username_offline'
+            ? 'Requested username is currently offline in-game.'
+            : 'None of your linked usernames are currently online in-game.';
+        return res.status(409).json({
+          error: reason,
+          usernames,
+          onlinePlayers: presenceResult.players || [],
+        });
+      }
+
+      const resolvedUsername = onlineSelection.username;
+      if (normalizeText(listing.seller)?.toLowerCase() === resolvedUsername.toLowerCase()) {
+        return res.status(409).json({
+          error: 'Cannot buy your own listing.',
+          listingId,
+          username: resolvedUsername,
+        });
+      }
+
+      const requestId = generateWebBuyRequestId();
+      const callbackUrl = FLEA_WEB_BUY_CALLBACK_URL;
+      const targetArg = formatClientExeUsernameArg(resolvedUsername);
+      if (!targetArg) {
+        return res.status(400).json({ error: 'Resolved username is invalid for client executor dispatch.' });
+      }
+
+      const command = `luacmd clientexe ${targetArg} webfm_buy_listing ${quoteRconArg(requestId)} ${listingId} ${qty} ${quoteRconArg(callbackUrl)}`;
+      const waitForCallback = createPendingWebBuyRequest({
+        requestId,
+        listingId,
+        qty,
+        username: resolvedUsername,
+        userId,
+      });
+
+      try {
+        const rconResponse = await sendRconCommand(command);
+        logger.info('flea-market buy dispatched via clientexe', {
+          ...requestContext(req),
+          requestId,
+          listingId,
+          qty,
+          username: resolvedUsername,
+          callbackUrl,
+          commandPreview: command.slice(0, 280),
+          rconResponsePreview: String(rconResponse || '').slice(0, 280),
+        });
+      } catch (dispatchError) {
+        rejectPendingWebBuyRequest(requestId, dispatchError);
+        await waitForCallback.catch(() => {});
+
+        logger.error('flea-market buy dispatch failed', {
+          ...requestContext(req),
+          requestId,
+          listingId,
+          qty,
+          username: resolvedUsername,
+          error: dispatchError.message,
+          stack: dispatchError.stack,
+        });
+        return res.status(502).json({
+          error: `Failed to dispatch buy command to game server: ${dispatchError.message}`,
+          requestId,
+        });
+      }
+
+      let callbackResult = null;
+      try {
+        callbackResult = await waitForCallback;
+      } catch (waitError) {
+        logger.warn('flea-market buy callback timeout', {
+          ...requestContext(req),
+          requestId,
+          listingId,
+          qty,
+          username: resolvedUsername,
+          timeoutMs: FLEA_WEB_BUY_TIMEOUT_MS,
+          error: waitError.message,
+        });
+        return res.status(504).json({
+          error: 'Timed out waiting for in-game buy validation callback.',
+          requestId,
+          listingId,
+          qty,
+          username: resolvedUsername,
+          timeoutMs: FLEA_WEB_BUY_TIMEOUT_MS,
+        });
+      }
+
+      const message = normalizeText(callbackResult?.message) || 'buy_result_received';
+      const ok = callbackResult?.ok === true;
+      const statusCode = ok
+        ? 200
+        : (message === 'buy_throttled' ? 429 : 409);
+
+      logger.info('flea-market buy completed', {
         ...requestContext(req),
         requestId,
         listingId,
         qty,
         username: resolvedUsername,
-        error: dispatchError.message,
-        stack: dispatchError.stack,
+        ok,
+        message,
+        callbackDataKeys: Object.keys(callbackResult?.data || {}),
       });
-      return res.status(502).json({
-        error: `Failed to dispatch buy command to game server: ${dispatchError.message}`,
+
+      return res.status(statusCode).json({
+        ok,
         requestId,
+        listingId,
+        qty,
+        username: resolvedUsername,
+        message,
+        data: callbackResult?.data || {},
+        completedAt: callbackResult?.completedAt || new Date().toISOString(),
+        callbackSource: callbackResult?.source || 'ingame_callback',
       });
+    } finally {
+      inFlightWebBuyByUserListing.delete(inFlightKey);
     }
-
-    let callbackResult = null;
-    try {
-      callbackResult = await waitForCallback;
-    } catch (waitError) {
-      logger.warn('flea-market buy callback timeout', {
-        ...requestContext(req),
-        requestId,
-        listingId,
-        qty,
-        username: resolvedUsername,
-        timeoutMs: FLEA_WEB_BUY_TIMEOUT_MS,
-        error: waitError.message,
-      });
-      return res.status(504).json({
-        error: 'Timed out waiting for in-game buy validation callback.',
-        requestId,
-        listingId,
-        qty,
-        username: resolvedUsername,
-        timeoutMs: FLEA_WEB_BUY_TIMEOUT_MS,
-      });
-    }
-
-    const message = normalizeText(callbackResult?.message) || 'buy_result_received';
-    const ok = callbackResult?.ok === true;
-    const statusCode = ok
-      ? 200
-      : (message === 'buy_throttled' ? 429 : 409);
-
-    logger.info('flea-market buy completed', {
-      ...requestContext(req),
-      requestId,
-      listingId,
-      qty,
-      username: resolvedUsername,
-      ok,
-      message,
-      callbackDataKeys: Object.keys(callbackResult?.data || {}),
-    });
-
-    return res.status(statusCode).json({
-      ok,
-      requestId,
-      listingId,
-      qty,
-      username: resolvedUsername,
-      message,
-      data: callbackResult?.data || {},
-      completedAt: callbackResult?.completedAt || new Date().toISOString(),
-      callbackSource: callbackResult?.source || 'ingame_callback',
-    });
   } catch (err) {
     const statusCode = /required|must be/.test(err.message) ? 400 : 500;
     logger.error('flea-market buy failed', {

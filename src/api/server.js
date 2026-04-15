@@ -5,6 +5,7 @@ import zmusersRouter from './routes/zmusers.js';
 import playerAuctionsRouter from './routes/playerAuctions.js';
 import virtualGarageRouter from './routes/virtualGarage.js';
 import fleaMarketRouter from './routes/fleaMarket.js';
+import adminClockSessionsRouter from './routes/adminClockSessions.js';
 import logger from '../utils/logger.js';
 import { apiRequestAuditLog } from './middleware/requestAuditLog.js';
 
@@ -18,6 +19,7 @@ app.use('/zmusers', zmusersRouter);
 app.use('/player-auctions', playerAuctionsRouter);
 app.use('/virtual-garage', virtualGarageRouter);
 app.use('/flea-market', fleaMarketRouter);
+app.use('/admin-clock', adminClockSessionsRouter);
 
 const PORT = process.env.PORT || 3000;
 const DB_TARGET = process.env.DB_TARGET || '(unset)';

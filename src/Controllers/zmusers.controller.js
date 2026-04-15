@@ -148,8 +148,7 @@ export const login = async (req, res) => {
           { username2: username }
         ],
         password1: password,
-        accesslevel: null
-      }
+      },
     });
 
     if (user) {

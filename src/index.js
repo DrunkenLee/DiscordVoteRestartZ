@@ -11,6 +11,7 @@ import fleaMarketRouter from './api/routes/fleaMarket.js';
 import authRouter from './api/routes/auth.js';
 import mapRouter from './api/routes/map.js';
 import userDetailsRouter from './api/routes/userDetails.js';
+import adminClockSessionsRouter from './api/routes/adminClockSessions.js';
 import path from 'path';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
 import { NodeApiQueueProcessor } from './services/nodeApiQueueProcessor.js';
@@ -89,6 +90,7 @@ async function main() {
   app.use('/api/auth', authRouter);
   app.use('/api/map', mapRouter);
   app.use('/api/user-details', userDetailsRouter);
+  app.use('/api/admin-clock', adminClockSessionsRouter);
 
   // Legacy (non-prefixed) routes for backward compatibility
   app.use('/zmusers', zmusersRouter);
@@ -98,6 +100,7 @@ async function main() {
   app.use('/auth', authRouter);
   app.use('/map', mapRouter);
   app.use('/user-details', userDetailsRouter);
+  app.use('/admin-clock', adminClockSessionsRouter);
 
   // Serve static map assets (if present)
   const pzmapStatic = path.resolve(process.cwd(), 'public', 'pzmap');
