@@ -19,6 +19,14 @@ import path from 'path';
 import logger from '../utils/logger.js';
 import { lookupWhitelistUserByUsername } from '../services/whitelistDbLookup.js';
 import { registerWhitelistUserCredentials } from '../services/authRegistration.js';
+import {
+  closeClockSession as closeAdminClockSession,
+  closeClockSessionByDiscordUserId,
+  confirmClockSessionByDiscordUserId,
+  createClockInSession,
+  getAdminClockPolicy,
+  runAdminClockConfirmationSweep,
+} from '../services/adminClockService.js';
 // Toggle for verbose getUserPoints debug logging
 const ENABLE_POINTS_DEBUG = false;
 
@@ -72,6 +80,8 @@ export class DiscordBot {
 
     // Add lua command manager
     this.luaCommandManager = new BotLuaCommandManager();
+    this.adminClockPolicy = getAdminClockPolicy();
+    this.isAdminClockSweepRunning = false;
 
     // Set up client presence when ready
     this.client.once(Events.ClientReady, () => {
@@ -644,79 +654,79 @@ print(json.dumps(result, ensure_ascii=False))
   }
 
   async handleAdminClockIn(message) {
-    const existingOpenSession = await AdminClockSession.findOne({
-      where: {
-        discordUserId: message.author.id,
-        clockOutAt: null,
-      },
-      order: [['clockInAt', 'DESC']],
+    const viewerDisplayName = message.member?.displayName || message.author.username;
+    const clockInResult = await createClockInSession({
+      discordUserId: message.author.id,
+      discordUsername: message.author.username,
+      discordDisplayName: viewerDisplayName,
+      guildId: message.guild?.id || null,
+      clockInChannelId: message.channel?.id || null,
+      source: 'discord:clockin',
     });
 
-    if (existingOpenSession) {
+    if (!clockInResult.ok && clockInResult.reason === 'already_clocked_in') {
       return message.channel.send(
-        `⚠️ You are already clocked in since **${this.formatJakartaDateTime(existingOpenSession.clockInAt)} WIB**. Use \`${config.discord.prefix}clockout\` first.`
+        `⚠️ You are already clocked in since **${this.formatJakartaDateTime(clockInResult.session.clockInAt)} WIB**. Use \`${config.discord.prefix}clockout\` first.`
       );
     }
 
-    const now = new Date();
-    const displayName = message.member?.displayName || message.author.username;
-
-    try {
-      const session = await AdminClockSession.create({
-        discordUserId: message.author.id,
-        discordUsername: message.author.username,
-        discordDisplayName: displayName,
-        guildId: message.guild?.id || null,
-        clockInChannelId: message.channel?.id || null,
-        workDate: this.getJakartaDateOnly(now),
-        clockInAt: now,
-      });
-
-      return message.channel.send(
-        `✅ Clock-in saved for **${displayName}** at **${this.formatJakartaDateTime(session.clockInAt)} WIB** (work date: **${session.workDate}**).`
-      );
-    } catch (error) {
-      if (error?.name === 'SequelizeUniqueConstraintError') {
-        return message.channel.send(
-          `⚠️ You already have an active clock-in session. Use \`${config.discord.prefix}clockout\` first.`
-        );
-      }
-      throw error;
+    if (!clockInResult.ok) {
+      throw new Error('Failed to create clock-in session.');
     }
+
+    const createdSession = clockInResult.session;
+    return message.channel.send(
+      `✅ Clock-in saved for **${viewerDisplayName}** at **${this.formatJakartaDateTime(createdSession.clockInAt)} WIB** (work date: **${createdSession.workDate}**).\n` +
+      `⏰ Next confirmation before **${this.formatJakartaDateTime(createdSession.nextConfirmationDueAt)} WIB**. Use \`${config.discord.prefix}ok\` or extend from website.`
+    );
   }
 
   async handleAdminClockOut(message) {
-    const openSession = await AdminClockSession.findOne({
-      where: {
-        discordUserId: message.author.id,
-        clockOutAt: null,
-      },
-      order: [['clockInAt', 'DESC']],
+    const viewerDisplayName = message.member?.displayName || message.author.username;
+    const clockOutResult = await closeClockSessionByDiscordUserId(message.author.id, {
+      clockOutChannelId: message.channel?.id || null,
+      source: 'discord:clockout',
+      autoClockedOut: false,
     });
 
-    if (!openSession) {
+    if (!clockOutResult.ok && clockOutResult.reason === 'no_active_session') {
       return message.channel.send(
         `⚠️ No active clock-in found. Use \`${config.discord.prefix}clockin\` first.`
       );
     }
 
-    const clockOutAt = new Date();
-    const clockInAt = new Date(openSession.clockInAt);
-    const durationMinutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000));
-    const displayName = message.member?.displayName || message.author.username;
-
-    await openSession.update({
-      clockOutAt,
-      clockOutChannelId: message.channel?.id || null,
-      durationMinutes,
-      discordDisplayName: displayName,
-      discordUsername: message.author.username,
-    });
+    if (!clockOutResult.ok) {
+      throw new Error('Failed to close active clock session.');
+    }
 
     return message.channel.send(
-      `✅ Clock-out saved for **${displayName}** at **${this.formatJakartaDateTime(clockOutAt)} WIB**.\n` +
-      `⏱️ Duration: **${this.formatDurationMinutes(durationMinutes)}** (${durationMinutes} minutes)\n` +
-      `📅 Work date: **${openSession.workDate}**`
+      `✅ Clock-out saved for **${viewerDisplayName}** at **${this.formatJakartaDateTime(clockOutResult.clockOutAt)} WIB**.\n` +
+      `⏱️ Duration: **${this.formatDurationMinutes(clockOutResult.durationMinutes)}** (${clockOutResult.durationMinutes} minutes)\n` +
+      `📅 Work date: **${clockOutResult.session.workDate}**`
+    );
+  }
+
+  async handleAdminClockConfirmationOk(message) {
+    const displayName = message.member?.displayName || message.author.username;
+    const result = await confirmClockSessionByDiscordUserId(message.author.id, {
+      source: 'discord:ok',
+      discordUsername: message.author.username,
+      discordDisplayName: displayName,
+    });
+
+    if (!result.ok && result.reason === 'no_active_session') {
+      return message.channel.send(
+        `⚠️ No active clock-in found. Use \`${config.discord.prefix}clockin\` first.`
+      );
+    }
+
+    if (!result.ok) {
+      throw new Error('Failed to confirm admin clock session.');
+    }
+
+    return message.channel.send(
+      `✅ Confirmation received for **${displayName}**.\n` +
+      `⏰ Next confirmation before **${this.formatJakartaDateTime(result.nextConfirmationDueAt)} WIB**.`
     );
   }
 
@@ -841,20 +851,99 @@ print(json.dumps(result, ensure_ascii=False))
   }
 
   async closeClockSession(openSession, clockOutChannelId = null) {
-    const clockOutAt = new Date();
-    const clockInAt = new Date(openSession.clockInAt);
-    const durationMinutes = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60000));
-
-    await openSession.update({
-      clockOutAt,
+    const result = await closeAdminClockSession(openSession, {
       clockOutChannelId,
-      durationMinutes,
+      source: 'discord:devclockout',
+      autoClockedOut: false,
     });
 
     return {
-      clockOutAt,
-      durationMinutes,
+      clockOutAt: result.clockOutAt,
+      durationMinutes: result.durationMinutes,
     };
+  }
+
+  async getAdminClockConfirmationChannel() {
+    const channelId = String(this.adminClockPolicy?.confirmationChannelId || '').trim();
+    if (!channelId) {
+      return null;
+    }
+
+    try {
+      const cached = this.client.channels.cache.get(channelId);
+      if (cached) return cached;
+      return await this.client.channels.fetch(channelId);
+    } catch {
+      return null;
+    }
+  }
+
+  async sendAdminClockReminderNotification(payload) {
+    const channel = await this.getAdminClockConfirmationChannel();
+    if (!channel) return;
+
+    const session = payload?.session;
+    const discordUserId = session?.discordUserId || 'unknown';
+    const displayName = session?.discordDisplayName || session?.discordUsername || discordUserId;
+
+    const dueText = this.formatJakartaDateTime(payload?.nextConfirmationDueAt);
+    const graceDeadlineText = this.formatJakartaDateTime(payload?.graceDeadlineAt);
+
+    await channel.send(
+      `⏳ **Admin confirmation needed**\n` +
+      `Admin: <@${discordUserId}> (${displayName})\n` +
+      `Session reached 1-hour checkpoint at **${dueText} WIB**.\n` +
+      `Confirm with \`${config.discord.prefix}ok\` in Discord or click **Extend Session** on website before **${graceDeadlineText} WIB** to avoid auto clockout.`
+    );
+  }
+
+  async sendAdminClockAutoClockOutNotification(payload) {
+    const channel = await this.getAdminClockConfirmationChannel();
+    if (!channel) return;
+
+    const session = payload?.session;
+    const discordUserId = session?.discordUserId || 'unknown';
+    const displayName = session?.discordDisplayName || session?.discordUsername || discordUserId;
+    const durationMinutes = Number(payload?.durationMinutes || session?.durationMinutes || 0);
+
+    await channel.send(
+      `🚫 **Auto clockout executed (AFK protection)**\n` +
+      `Admin: <@${discordUserId}> (${displayName})\n` +
+      `No confirmation received after 1-hour checkpoint.\n` +
+      `Clocked out at **${this.formatJakartaDateTime(payload?.clockOutAt)} WIB**.\n` +
+      `Total duration: **${this.formatDurationMinutes(durationMinutes)}** (${durationMinutes} minutes).`
+    );
+  }
+
+  async runAdminClockConfirmationSweepJob() {
+    if (this.isAdminClockSweepRunning) {
+      return;
+    }
+
+    this.isAdminClockSweepRunning = true;
+    try {
+      const sweepResult = await runAdminClockConfirmationSweep({
+        onReminderNeeded: async (payload) => {
+          await this.sendAdminClockReminderNotification(payload);
+        },
+        onAutoClockOut: async (payload) => {
+          await this.sendAdminClockAutoClockOutNotification(payload);
+        },
+      });
+
+      if (sweepResult.reminders.length || sweepResult.autoClockedOut.length) {
+        logger.info('[AdminClock] confirmation sweep result', {
+          checkedAt: sweepResult.checkedAt,
+          scanned: sweepResult.scanned,
+          reminders: sweepResult.reminders.length,
+          autoClockedOut: sweepResult.autoClockedOut.length,
+        });
+      }
+    } catch (error) {
+      logger.error('[AdminClock] confirmation sweep failed', { error: error.message });
+    } finally {
+      this.isAdminClockSweepRunning = false;
+    }
   }
 
   setupEventListeners(rconClient, auctionLogMonitor = null) {
@@ -1025,6 +1114,19 @@ print(json.dumps(result, ensure_ascii=False))
         }
       }
 
+      if (command === 'ok') {
+        if (!isAdmin) {
+          return message.channel.send('ERROR: You need the @admin role to use this command.');
+        }
+
+        try {
+          await this.handleAdminClockConfirmationOk(message);
+          return;
+        } catch (error) {
+          console.error('Error in !ok:', error);
+          return message.channel.send(`ERROR: Failed to confirm session: ${error.message}`);
+        }
+      }
       if (command === 'devclockout') {
         if (!isDeveloper) {
           return message.channel.send('ERROR: You need the @developer role to use this command.');
@@ -1812,6 +1914,7 @@ print(json.dumps(result, ensure_ascii=False))
         otherCommands += `\`${prefix}removeuserfromwhitelist <username>\` - Remove a user from the whitelist (requires @admin role)\n`;
         otherCommands += `\`${prefix}clockin\` - Start your admin activity session (requires @admin role)\n`;
         otherCommands += `\`${prefix}clockout\` - End your admin activity session and save duration (requires @admin role)\n`;
+        otherCommands += `\`${prefix}ok\` - Confirm you are still active and extend your admin session (requires @admin role)\n`;
         otherCommands += `\`${prefix}devclockout <username>\` - Force clockout an active admin session (requires @developer role)\n`;
         otherCommands += `\`${prefix}devhelp\` - Show developer/admin commands for ZM_ClientExecutor (requires @admin/@developer role)\n`;
         otherCommands += `\`${prefix}cronstatus\` - Check cron job execution status (requires @admin/@developer role)\n`;
@@ -2520,6 +2623,7 @@ print(json.dumps(result, ensure_ascii=False))
           helpMessage3 += '```\n';
           helpMessage3 += '!topupraidpoint <username> <value> - Top up raid point via addskinpoint\n';
           helpMessage3 += '!resetrepaircooldown <username> - Reset repair cooldown via setlastrepairtime\n';
+          helpMessage3 += '!ok - Confirm active admin session (extends 1 hour)\n';
           helpMessage3 += '!devclockout <username> - Force clockout for active admin clock session\n';
           helpMessage3 += '```\n';
           helpMessage3 += '**Note:** All commands require @admin or @developer role.';
@@ -3073,8 +3177,20 @@ print(json.dumps(result, ensure_ascii=False))
       }
     );
 
+    const adminClockConfirmationSweepExpression = String(process.env.ADMIN_CLOCK_CONFIRM_SWEEP_CRON || '*/1 * * * *').trim();
+    cron.schedule(
+      adminClockConfirmationSweepExpression,
+      async () => {
+        await this.runAdminClockConfirmationSweepJob();
+      },
+      {
+        timezone: 'Asia/Jakarta',
+      }
+    );
+
     console.log('   - Scheduled restart warning at 03:59, 11:59, 17:59 WIB');
     console.log('   - Scheduled server restart at 04:00, 12:00, 18:00 WIB');
+    console.log(`   - Admin clock confirmation sweep on cron \"${adminClockConfirmationSweepExpression}\"`);
 
     // Handle button interactions and modal submissions for auction system
     this.client.on(Events.InteractionCreate, async (interaction) => {
@@ -4142,3 +4258,5 @@ print(json.dumps(result, ensure_ascii=False))
     this.luaCommandManager.cleanup();
   }
 }
+
+

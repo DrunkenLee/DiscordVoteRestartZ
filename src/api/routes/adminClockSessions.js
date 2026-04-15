@@ -3,6 +3,13 @@ import { Op } from 'sequelize';
 import { AdminClockSession } from '../../models/adminClockSession.js';
 import { ZMUser } from '../../models/zmuser.js';
 import { requireAuthBearer } from '../middleware/authBearer.js';
+import {
+  closeClockSessionByDiscordUserId,
+  confirmClockSessionByDiscordUserId,
+  createClockInSession,
+  getAdminClockPolicy,
+  getOpenSessionByDiscordUserId,
+} from '../../services/adminClockService.js';
 
 const router = express.Router();
 
@@ -124,6 +131,9 @@ const toPublicSession = (session, linkedUsernamesByDiscordId, nowTs) => {
   const linkedGameUsernames = linkedUsernamesByDiscordId.get(discordUserId) || [];
   const durationMinutes = computeSessionDurationMinutes(session, nowTs);
   const workDate = normalizeText(session?.workDate) || toJakartaDateKey(session?.clockInAt);
+  const nextConfirmationDueAt = session?.nextConfirmationDueAt || null;
+  const dueTs = nextConfirmationDueAt ? new Date(nextConfirmationDueAt).getTime() : Number.NaN;
+  const overdueMs = Number.isFinite(dueTs) ? Math.max(0, nowTs - dueTs) : 0;
 
   return {
     id: session?.id ?? null,
@@ -138,6 +148,14 @@ const toPublicSession = (session, linkedUsernamesByDiscordId, nowTs) => {
     durationMinutes,
     durationLabel: formatDurationLabel(durationMinutes),
     linkedGameUsernames,
+    lastConfirmationAt: session?.lastConfirmationAt || null,
+    nextConfirmationDueAt,
+    confirmationReminderSentAt: session?.confirmationReminderSentAt || null,
+    lastConfirmationSource: session?.lastConfirmationSource || null,
+    autoClockedOut: Boolean(session?.autoClockedOut),
+    autoClockOutReason: session?.autoClockOutReason || null,
+    autoClockOutBy: session?.autoClockOutBy || null,
+    confirmationOverdueMs: overdueMs,
   };
 };
 
@@ -169,6 +187,29 @@ const requireAdminAccessLevel = (req, res, next) => {
   return next();
 };
 
+const resolveAuthDiscordIdentity = (authUser) => {
+  const discordUserId = normalizeText(authUser?.discordid);
+  if (!discordUserId) {
+    return null;
+  }
+
+  const usernameCandidate = normalizeText(authUser?.username1)
+    || normalizeText(authUser?.username2)
+    || normalizeText(authUser?.discordid);
+
+  return {
+    discordUserId,
+    discordUsername: usernameCandidate || null,
+    discordDisplayName: usernameCandidate || null,
+  };
+};
+
+const buildSingleSessionPublicPayload = async (session, nowTs = Date.now()) => {
+  if (!session) return null;
+  const linkedUsernamesByDiscordId = await buildLinkedUsernamesByDiscordId([session.discordUserId]);
+  return toPublicSession(session, linkedUsernamesByDiscordId, nowTs);
+};
+
 router.get('/active-admins', requireAuthBearer, attachAuthUserRecord, async (_req, res) => {
   try {
     const openSessions = await AdminClockSession.findAll({
@@ -185,8 +226,142 @@ router.get('/active-admins', requireAuthBearer, attachAuthUserRecord, async (_re
 
     return res.json({
       checkedAt: new Date(nowTs).toISOString(),
+      policy: getAdminClockPolicy(),
       count: activeAdmins.length,
       activeAdmins,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/me/session', requireAuthBearer, attachAuthUserRecord, requireAdminAccessLevel, async (req, res) => {
+  try {
+    const identity = resolveAuthDiscordIdentity(req.authZmUser);
+    if (!identity) {
+      return res.status(400).json({
+        error: 'This account has no discordid in zmusers. Cannot resolve admin clock session identity.',
+      });
+    }
+
+    const openSession = await getOpenSessionByDiscordUserId(identity.discordUserId);
+    const session = await buildSingleSessionPublicPayload(openSession);
+
+    return res.json({
+      checkedAt: new Date().toISOString(),
+      policy: getAdminClockPolicy(),
+      session,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/clock-in', requireAuthBearer, attachAuthUserRecord, requireAdminAccessLevel, async (req, res) => {
+  try {
+    const identity = resolveAuthDiscordIdentity(req.authZmUser);
+    if (!identity) {
+      return res.status(400).json({
+        error: 'This account has no discordid in zmusers. Cannot clock in from website.',
+      });
+    }
+
+    const result = await createClockInSession({
+      discordUserId: identity.discordUserId,
+      discordUsername: identity.discordUsername,
+      discordDisplayName: identity.discordDisplayName,
+      guildId: null,
+      clockInChannelId: 'website',
+      source: 'website:clockin',
+    });
+
+    if (!result.ok && result.reason === 'already_clocked_in') {
+      const existing = await buildSingleSessionPublicPayload(result.session);
+      return res.status(409).json({
+        error: 'Admin already has an active clock-in session.',
+        session: existing,
+      });
+    }
+
+    if (!result.ok) {
+      return res.status(500).json({ error: 'Failed to create clock-in session.' });
+    }
+
+    const session = await buildSingleSessionPublicPayload(result.session);
+    return res.status(201).json({
+      ok: true,
+      checkedAt: new Date().toISOString(),
+      policy: getAdminClockPolicy(),
+      session,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/clock-out', requireAuthBearer, attachAuthUserRecord, requireAdminAccessLevel, async (req, res) => {
+  try {
+    const identity = resolveAuthDiscordIdentity(req.authZmUser);
+    if (!identity) {
+      return res.status(400).json({
+        error: 'This account has no discordid in zmusers. Cannot clock out from website.',
+      });
+    }
+
+    const result = await closeClockSessionByDiscordUserId(identity.discordUserId, {
+      clockOutChannelId: 'website',
+      source: 'website:clockout',
+      autoClockedOut: false,
+    });
+
+    if (!result.ok && result.reason === 'no_active_session') {
+      return res.status(404).json({ error: 'No active clock-in session found.' });
+    }
+
+    if (!result.ok) {
+      return res.status(500).json({ error: 'Failed to close active clock session.' });
+    }
+
+    const session = await buildSingleSessionPublicPayload(result.session);
+    return res.json({
+      ok: true,
+      checkedAt: new Date().toISOString(),
+      session,
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/extend', requireAuthBearer, attachAuthUserRecord, requireAdminAccessLevel, async (req, res) => {
+  try {
+    const identity = resolveAuthDiscordIdentity(req.authZmUser);
+    if (!identity) {
+      return res.status(400).json({
+        error: 'This account has no discordid in zmusers. Cannot extend session from website.',
+      });
+    }
+
+    const result = await confirmClockSessionByDiscordUserId(identity.discordUserId, {
+      source: 'website:extend',
+      discordUsername: identity.discordUsername,
+      discordDisplayName: identity.discordDisplayName,
+    });
+
+    if (!result.ok && result.reason === 'no_active_session') {
+      return res.status(404).json({ error: 'No active clock-in session found.' });
+    }
+
+    if (!result.ok) {
+      return res.status(500).json({ error: 'Failed to extend admin clock session.' });
+    }
+
+    const session = await buildSingleSessionPublicPayload(result.session);
+    return res.json({
+      ok: true,
+      checkedAt: new Date().toISOString(),
+      policy: getAdminClockPolicy(),
+      session,
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });
@@ -334,6 +509,7 @@ router.get('/sessions', requireAuthBearer, attachAuthUserRecord, requireAdminAcc
 
     return res.json({
       checkedAt: new Date(nowTs).toISOString(),
+      policy: getAdminClockPolicy(),
       viewer: {
         id: req.authZmUser?.id ?? req.authZmUser?.userid ?? null,
         username1: req.authZmUser?.username1 || null,

@@ -50,6 +50,35 @@ export const AdminClockSession = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    lastConfirmationAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    nextConfirmationDueAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    lastConfirmationSource: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    confirmationReminderSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    autoClockedOut: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    autoClockOutReason: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    autoClockOutBy: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
   },
   {
     tableName: 'admin_clock_sessions',
