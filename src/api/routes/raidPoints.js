@@ -5,6 +5,7 @@ import { Rcon } from 'rcon-client';
 import { ZMUser } from '../../models/zmuser.js';
 import { RaidPointTopup } from '../../models/raidPointTopup.js';
 import { requireAuthBearer } from '../middleware/authBearer.js';
+import { fetchOnlinePlayersViaSsh } from '../../services/gamePresenceLookup.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
@@ -159,6 +160,36 @@ function resolveSelectedUsername(candidates, preferredUsername) {
 
   const match = candidates.find((candidate) => candidate.toLowerCase() === preferred.toLowerCase());
   return match || null;
+}
+
+function resolveOnlineUsername(candidates, onlinePlayers, preferredUsername = null) {
+  const onlineByLower = new Map(
+    (Array.isArray(onlinePlayers) ? onlinePlayers : [])
+      .map((name) => [String(name || '').trim().toLowerCase(), String(name || '').trim()])
+      .filter(([key]) => Boolean(key))
+  );
+
+  const preferred = normalizeText(preferredUsername);
+  if (preferred) {
+    const preferredKey = preferred.toLowerCase();
+    if (!candidates.some((name) => name.toLowerCase() === preferredKey)) {
+      return { username: null, reason: 'preferred_username_not_allowed' };
+    }
+    const matchedPreferred = onlineByLower.get(preferredKey);
+    if (matchedPreferred) {
+      return { username: matchedPreferred, reason: null };
+    }
+    return { username: null, reason: 'preferred_username_offline' };
+  }
+
+  for (const candidate of candidates) {
+    const match = onlineByLower.get(candidate.toLowerCase());
+    if (match) {
+      return { username: match, reason: null };
+    }
+  }
+
+  return { username: null, reason: 'no_usernames_online' };
 }
 
 function readSignatureHeader(req) {
@@ -322,7 +353,51 @@ async function creditTopupIfNeeded(topupId, source = 'unknown') {
   }
 
   try {
-    const targetArg = formatClientExeUsernameArg(topup.username);
+    const presenceResult = await fetchOnlinePlayersViaSsh();
+    if (!presenceResult.ok) {
+      await RaidPointTopup.update(
+        {
+          creditStatus: 'pending',
+          creditError: `Payment settled. Auto-credit delayed because online status check failed: ${presenceResult.error || 'unknown error'}`,
+        },
+        { where: { id: topup.id } }
+      );
+
+      logger.warn('raid-point topup waiting credit: presence check failed', {
+        topupId: String(topup.id),
+        username: topup.username,
+        source,
+        presenceError: presenceResult.error || null,
+      });
+
+      topup = await RaidPointTopup.findByPk(topupId);
+      return { ok: false, reason: 'presence_check_failed', topup };
+    }
+
+    const onlineSelection = resolveOnlineUsername([topup.username], presenceResult.players, topup.username);
+    if (!onlineSelection.username) {
+      await RaidPointTopup.update(
+        {
+          creditStatus: 'pending',
+          creditError: `Payment settled. Auto-credit waiting: player "${topup.username}" must be online in-game.`,
+        },
+        { where: { id: topup.id } }
+      );
+
+      logger.info('raid-point topup waiting credit: player offline', {
+        topupId: String(topup.id),
+        username: topup.username,
+        source,
+        onlinePlayers: presenceResult.players || [],
+        presenceSource: presenceResult.source || null,
+      });
+
+      topup = await RaidPointTopup.findByPk(topupId);
+      return { ok: false, reason: 'player_offline', topup };
+    }
+
+    const targetUsername = onlineSelection.username;
+    const targetArg = formatClientExeUsernameArg(targetUsername);
     if (!targetArg) {
       throw new Error('Resolved username is invalid for client executor dispatch.');
     }
@@ -332,7 +407,7 @@ async function creditTopupIfNeeded(topupId, source = 'unknown') {
       throw new Error('Raid point amount is invalid.');
     }
 
-    const command = `luacmd clientexe ${targetArg} addskinpoint ${targetArg} ${amount}`;
+    const command = `luacmd clientexe ${targetArg} depositraidpoints ${targetArg} ${amount}`;
     const rconResponse = await sendRconCommand(command);
     await RaidPointTopup.update(
       {
@@ -346,7 +421,7 @@ async function creditTopupIfNeeded(topupId, source = 'unknown') {
     logger.info('raid-point topup credited', {
       topupId: String(topup.id),
       userId: String(topup.userId),
-      username: topup.username,
+      username: targetUsername,
       raidPoints: topup.raidPoints,
       source,
       rconResponsePreview: String(rconResponse || '').slice(0, 260),
@@ -467,6 +542,40 @@ router.post('/topups', requireAuthBearer, async (req, res) => {
       throw createHttpError('Selected username is not linked to your account.', 400);
     }
 
+    const presenceResult = await fetchOnlinePlayersViaSsh();
+    if (!presenceResult.ok) {
+      throw createHttpError(
+        'Unable to verify in-game online status right now. Please try again in a moment.',
+        502,
+        {
+          presenceError: presenceResult.error || null,
+          presenceSource: presenceResult.source || null,
+        }
+      );
+    }
+
+    const onlineSelection = resolveOnlineUsername(usernames, presenceResult.players, selectedUsername);
+    if (!onlineSelection.username) {
+      const reason = onlineSelection.reason === 'preferred_username_not_allowed'
+        ? 'Selected username is not linked to your account.'
+        : onlineSelection.reason === 'preferred_username_offline'
+          ? `Username "${selectedUsername}" is not online in-game.`
+          : 'None of your linked usernames are currently online in-game.';
+
+      throw createHttpError(
+        `${reason} Please login to the game first, then create QRIS payment.`,
+        409,
+        {
+          usernames,
+          selectedUsername,
+          onlinePlayers: presenceResult.players || [],
+          presenceSource: presenceResult.source || null,
+        }
+      );
+    }
+
+    const resolvedUsername = onlineSelection.username;
+
     const gatewayResponse = await autogopayPost('/qris/generate', { amount });
     const gatewayData = gatewayResponse?.data && typeof gatewayResponse.data === 'object'
       ? gatewayResponse.data
@@ -488,7 +597,7 @@ router.post('/topups', requireAuthBearer, async (req, res) => {
 
     let topup = await RaidPointTopup.create({
       userId: user.id ?? user.userid,
-      username: selectedUsername,
+      username: resolvedUsername,
       raidPoints,
       amount,
       idrPerRaidPoint,
@@ -545,30 +654,38 @@ router.get('/topups/:id', requireAuthBearer, async (req, res) => {
     const shouldRefresh = REFRESH_QUERY_TRUE_VALUES.has(refreshRaw);
 
     let refreshed = topup;
-    if (shouldRefresh && String(topup.paymentStatus || '').toLowerCase() === 'pending') {
-      const gatewayResponse = await autogopayPost('/qris/status', {
-        transaction_id: topup.autogopayTransactionId,
-      });
+    if (shouldRefresh) {
+      const paymentStatus = String(topup.paymentStatus || '').toLowerCase();
+      const creditStatus = String(topup.creditStatus || '').toLowerCase();
 
-      const gatewayData = gatewayResponse?.data && typeof gatewayResponse.data === 'object'
-        ? gatewayResponse.data
-        : {};
-      const gatewayStatus = normalizeGatewayStatus(
-        gatewayData.transaction_status
-        || gatewayData.status
-        || gatewayResponse?.status
-        || (gatewayResponse?.success ? 'settlement' : 'pending')
-      );
+      if (paymentStatus === 'pending') {
+        const gatewayResponse = await autogopayPost('/qris/status', {
+          transaction_id: topup.autogopayTransactionId,
+        });
 
-      const transactionTime = parseGatewayDate(gatewayData.transaction_time);
-      refreshed = await applyGatewayStatusToTopup(topup, {
-        gatewayStatus,
-        gatewayMessage: normalizeText(gatewayResponse?.message),
-        gatewayPayload: gatewayResponse,
-        transactionTime: transactionTime === null ? undefined : transactionTime,
-        markStatusChecked: true,
-        creditSource: 'status_poll',
-      });
+        const gatewayData = gatewayResponse?.data && typeof gatewayResponse.data === 'object'
+          ? gatewayResponse.data
+          : {};
+        const gatewayStatus = normalizeGatewayStatus(
+          gatewayData.transaction_status
+          || gatewayData.status
+          || gatewayResponse?.status
+          || (gatewayResponse?.success ? 'settlement' : 'pending')
+        );
+
+        const transactionTime = parseGatewayDate(gatewayData.transaction_time);
+        refreshed = await applyGatewayStatusToTopup(topup, {
+          gatewayStatus,
+          gatewayMessage: normalizeText(gatewayResponse?.message),
+          gatewayPayload: gatewayResponse,
+          transactionTime: transactionTime === null ? undefined : transactionTime,
+          markStatusChecked: true,
+          creditSource: 'status_poll',
+        });
+      } else if (paymentStatus === SUCCESS_PAYMENT_STATUS && (creditStatus === 'pending' || creditStatus === 'failed')) {
+        await creditTopupIfNeeded(topup.id, 'manual_refresh_credit_retry');
+        refreshed = await RaidPointTopup.findByPk(topup.id);
+      }
     }
 
     return res.json({
