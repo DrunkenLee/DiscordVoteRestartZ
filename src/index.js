@@ -12,6 +12,7 @@ import authRouter from './api/routes/auth.js';
 import mapRouter from './api/routes/map.js';
 import userDetailsRouter from './api/routes/userDetails.js';
 import adminClockSessionsRouter from './api/routes/adminClockSessions.js';
+import raidPointsRouter from './api/routes/raidPoints.js';
 import path from 'path';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
 import { NodeApiQueueProcessor } from './services/nodeApiQueueProcessor.js';
@@ -79,7 +80,11 @@ async function main() {
   });
   app.use(cors(corsOptionsDelegate));
   app.options('*', cors(corsOptionsDelegate));
-  app.use(express.json());
+  app.use(express.json({
+    verify: (req, _res, buf) => {
+      req.rawBody = buf.toString('utf8');
+    }
+  }));
   app.use(apiRequestAuditLog);
 
   // API routes (prefixed with /api)
@@ -91,6 +96,7 @@ async function main() {
   app.use('/api/map', mapRouter);
   app.use('/api/user-details', userDetailsRouter);
   app.use('/api/admin-clock', adminClockSessionsRouter);
+  app.use('/api/raid-points', raidPointsRouter);
 
   // Legacy (non-prefixed) routes for backward compatibility
   app.use('/zmusers', zmusersRouter);
@@ -101,6 +107,7 @@ async function main() {
   app.use('/map', mapRouter);
   app.use('/user-details', userDetailsRouter);
   app.use('/admin-clock', adminClockSessionsRouter);
+  app.use('/raid-points', raidPointsRouter);
 
   // Serve static map assets (if present)
   const pzmapStatic = path.resolve(process.cwd(), 'public', 'pzmap');
