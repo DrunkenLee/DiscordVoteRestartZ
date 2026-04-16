@@ -200,7 +200,7 @@ async function sendRconCommand(command) {
   }
 }
 
-async function sendDepositRaidPointsWithRetry({ username, amount, source = 'unknown', topupId = null }) {
+async function sendRaidPointCreditWithRetry({ username, amount, source = 'unknown', topupId = null }) {
   const targetArg = formatClientExeUsernameArg(username);
   if (!targetArg) {
     throw new Error('Resolved username is invalid for client executor dispatch.');
@@ -211,7 +211,7 @@ async function sendDepositRaidPointsWithRetry({ username, amount, source = 'unkn
     throw new Error('Raid point amount is invalid.');
   }
 
-  const command = `luacmd clientexe ${targetArg} depositraidpoints ${targetArg} ${numericAmount}`;
+  const command = `luacmd clientexe ${targetArg} addskinpoint ${targetArg} ${numericAmount}`;
   const maxAttempts = resolveCreditMaxAttempts();
   const retryDelayMs = resolveCreditRetryDelayMs();
 
@@ -226,7 +226,7 @@ async function sendDepositRaidPointsWithRetry({ username, amount, source = 'unkn
       };
     } catch (error) {
       lastError = error;
-      logger.warn('raid-point topup deposit dispatch attempt failed', {
+      logger.warn('raid-point topup credit dispatch attempt failed', {
         topupId: topupId ? String(topupId) : null,
         username,
         amount: numericAmount,
@@ -243,7 +243,7 @@ async function sendDepositRaidPointsWithRetry({ username, amount, source = 'unkn
     }
   }
 
-  throw new Error(`depositraidpoints failed after ${maxAttempts} attempt(s): ${lastError?.message || 'unknown error'}`);
+  throw new Error(`addskinpoint dispatch failed after ${maxAttempts} attempt(s): ${lastError?.message || 'unknown error'}`);
 }
 
 function resolveAuthUsernames(user) {
@@ -584,7 +584,7 @@ async function creditTopupIfNeeded(topupId, source = 'unknown') {
       throw new Error('Raid point amount is invalid.');
     }
 
-    const dispatchResult = await sendDepositRaidPointsWithRetry({
+    const dispatchResult = await sendRaidPointCreditWithRetry({
       username: targetUsername,
       amount,
       source,
