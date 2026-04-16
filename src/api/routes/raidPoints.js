@@ -15,6 +15,7 @@ const DEFAULT_IDR_PER_RAID_POINT = 2000;
 const DEFAULT_AUTOGOPAY_TIMEOUT_MS = 12000;
 const DEFAULT_CREDIT_MAX_ATTEMPTS = 2;
 const DEFAULT_CREDIT_RETRY_DELAY_MS = 1500;
+const DEFAULT_AUTOGOPAY_DISCORD_CHANNEL_ID = '1494172044357800017';
 
 const SUCCESS_PAYMENT_STATUS = 'paid';
 const TERMINAL_PAYMENT_STATUSES = new Set(['paid', 'expired', 'cancelled']);
@@ -55,6 +56,10 @@ function resolveAutogopayBaseUrl() {
   const configured = normalizeText(process.env.AUTOGOPAY_BASE_URL);
   const candidate = configured || DEFAULT_AUTOGOPAY_BASE_URL;
   return candidate.replace(/\/+$/, '');
+}
+
+function resolveAutogopayDiscordChannelId() {
+  return normalizeText(process.env.AUTOGOPAY_WEBHOOK_DISCORD_CHANNEL_ID) || DEFAULT_AUTOGOPAY_DISCORD_CHANNEL_ID;
 }
 
 function resolveCreditMaxAttempts() {
@@ -146,6 +151,36 @@ function formatClientExeUsernameArg(username) {
 async function sleep(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return;
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function sendAutogopayWebhookDiscordNotification(req, lines) {
+  try {
+    const channelId = resolveAutogopayDiscordChannelId();
+    const discordClient = req?.app?.locals?.discordClient || null;
+    if (!channelId || !discordClient) {
+      return false;
+    }
+
+    const cachedChannel = discordClient.channels?.cache?.get(channelId);
+    const channel = cachedChannel || await discordClient.channels.fetch(channelId);
+    if (!channel || typeof channel.send !== 'function') {
+      return false;
+    }
+
+    const header = '**AutoGoPay Webhook Event**';
+    const bodyLines = Array.isArray(lines)
+      ? lines.filter((line) => normalizeText(line)).map((line) => String(line).trim())
+      : [];
+    const payload = [header, ...bodyLines].join('\n');
+    await channel.send(payload.slice(0, 1950));
+    return true;
+  } catch (error) {
+    logger.warn('autogopay discord webhook notify failed', {
+      channelId: resolveAutogopayDiscordChannelId(),
+      error: error?.message || String(error),
+    });
+    return false;
+  }
 }
 
 async function sendRconCommand(command) {
@@ -951,6 +986,10 @@ router.post('/autogopay-callback', async (req, res) => {
         signaturePresent: Boolean(signature),
         bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
       });
+      await sendAutogopayWebhookDiscordNotification(req, [
+        'Status: rejected_invalid_signature',
+        `Time: ${new Date().toISOString()}`,
+      ]);
       return res.status(401).json({ error: 'Invalid signature.' });
     }
 
@@ -979,6 +1018,12 @@ router.post('/autogopay-callback', async (req, res) => {
         transactionId,
         event,
       });
+      await sendAutogopayWebhookDiscordNotification(req, [
+        'Status: unmatched_transaction',
+        `Event: ${event || '-'}`,
+        `Transaction ID: ${transactionId}`,
+        `Time: ${new Date().toISOString()}`,
+      ]);
       return res.json({
         success: true,
         accepted: false,
@@ -1015,6 +1060,20 @@ router.post('/autogopay-callback', async (req, res) => {
       creditStatus: refreshed?.creditStatus || topup.creditStatus,
     });
 
+    await sendAutogopayWebhookDiscordNotification(req, [
+      'Status: callback_accepted',
+      `Event: ${event || '-'}`,
+      `Topup ID: ${topup.id}`,
+      `Username: ${refreshed?.username || topup.username || '-'}`,
+      `Transaction ID: ${transactionId}`,
+      `Payment: ${refreshed?.paymentStatus || topup.paymentStatus || '-'}`,
+      `Credit: ${refreshed?.creditStatus || topup.creditStatus || '-'}`,
+      `Amount IDR: ${refreshed?.amount || topup.amount || 0}`,
+      `Raid Points: ${refreshed?.raidPoints || topup.raidPoints || 0}`,
+      `Info: ${refreshed?.creditError || refreshed?.gatewayMessage || '-'}`,
+      `Time: ${new Date().toISOString()}`,
+    ]);
+
     return res.json({
       success: true,
       accepted: true,
@@ -1026,6 +1085,11 @@ router.post('/autogopay-callback', async (req, res) => {
       stack: error.stack,
       bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : [],
     });
+    await sendAutogopayWebhookDiscordNotification(req, [
+      'Status: callback_handler_error',
+      `Error: ${error.message}`,
+      `Time: ${new Date().toISOString()}`,
+    ]);
     return res.status(500).json({ error: error.message });
   }
 });

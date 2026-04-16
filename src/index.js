@@ -74,6 +74,7 @@ async function main() {
 
   // Initialize Express API server
   const app = express();
+  app.locals.discordClient = null;
   app.use((req, res, next) => {
     res.header('Vary', 'Origin');
     next();
@@ -159,6 +160,7 @@ async function main() {
     console.log('Logging in to Discord...');
     await discordBot.login();
     console.log('Discord bot logged in successfully.');
+    app.locals.discordClient = discordBot.client;
 
     // Set up initial RCON connection (non-blocking)
     console.log('Connecting to RCON server...');
