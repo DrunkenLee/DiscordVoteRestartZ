@@ -13,6 +13,8 @@ const router = express.Router();
 const DEFAULT_AUTOGOPAY_BASE_URL = 'https://api-gopay.sawargipay.cloud';
 const DEFAULT_IDR_PER_RAID_POINT = 2000;
 const DEFAULT_AUTOGOPAY_TIMEOUT_MS = 12000;
+const DEFAULT_CREDIT_MAX_ATTEMPTS = 2;
+const DEFAULT_CREDIT_RETRY_DELAY_MS = 1500;
 
 const SUCCESS_PAYMENT_STATUS = 'paid';
 const TERMINAL_PAYMENT_STATUSES = new Set(['paid', 'expired', 'cancelled']);
@@ -53,6 +55,18 @@ function resolveAutogopayBaseUrl() {
   const configured = normalizeText(process.env.AUTOGOPAY_BASE_URL);
   const candidate = configured || DEFAULT_AUTOGOPAY_BASE_URL;
   return candidate.replace(/\/+$/, '');
+}
+
+function resolveCreditMaxAttempts() {
+  const parsed = Number.parseInt(String(process.env.RAID_POINT_CREDIT_MAX_ATTEMPTS || DEFAULT_CREDIT_MAX_ATTEMPTS), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_CREDIT_MAX_ATTEMPTS;
+  return Math.min(parsed, 5);
+}
+
+function resolveCreditRetryDelayMs() {
+  const parsed = Number.parseInt(String(process.env.RAID_POINT_CREDIT_RETRY_DELAY_MS || DEFAULT_CREDIT_RETRY_DELAY_MS), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_CREDIT_RETRY_DELAY_MS;
+  return parsed;
 }
 
 function getAutogopayApiKey() {
@@ -129,6 +143,11 @@ function formatClientExeUsernameArg(username) {
   return /\s/.test(text) ? quoteRconArg(text) : text;
 }
 
+async function sleep(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function sendRconCommand(command) {
   const rconConfig = buildRconConfig();
   if (!isRconConfigured(rconConfig)) {
@@ -144,6 +163,52 @@ async function sendRconCommand(command) {
       await client.end().catch(() => {});
     }
   }
+}
+
+async function sendDepositRaidPointsWithRetry({ username, amount, source = 'unknown', topupId = null }) {
+  const targetArg = formatClientExeUsernameArg(username);
+  if (!targetArg) {
+    throw new Error('Resolved username is invalid for client executor dispatch.');
+  }
+
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    throw new Error('Raid point amount is invalid.');
+  }
+
+  const command = `luacmd clientexe ${targetArg} depositraidpoints ${targetArg} ${numericAmount}`;
+  const maxAttempts = resolveCreditMaxAttempts();
+  const retryDelayMs = resolveCreditRetryDelayMs();
+
+  let lastError = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await sendRconCommand(command);
+      return {
+        attempt,
+        maxAttempts,
+        response,
+      };
+    } catch (error) {
+      lastError = error;
+      logger.warn('raid-point topup deposit dispatch attempt failed', {
+        topupId: topupId ? String(topupId) : null,
+        username,
+        amount: numericAmount,
+        source,
+        attempt,
+        maxAttempts,
+        retryDelayMs,
+        error: error?.message || String(error),
+      });
+
+      if (attempt < maxAttempts) {
+        await sleep(retryDelayMs);
+      }
+    }
+  }
+
+  throw new Error(`depositraidpoints failed after ${maxAttempts} attempt(s): ${lastError?.message || 'unknown error'}`);
 }
 
 function resolveAuthUsernames(user) {
@@ -321,6 +386,88 @@ async function findAuthenticatedUser(req) {
   return user;
 }
 
+async function evaluateOnlineEligibility({ user, preferredUsername }) {
+  const usernames = resolveAuthUsernames(user);
+  if (!usernames.length) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'No whitelist username linked to your account.',
+      details: {
+        usernames: [],
+        selectedUsername: null,
+        onlinePlayers: [],
+        presenceSource: null,
+      },
+    };
+  }
+
+  const selectedUsername = resolveSelectedUsername(usernames, preferredUsername);
+  if (!selectedUsername) {
+    return {
+      ok: false,
+      status: 400,
+      error: 'Selected username is not linked to your account.',
+      details: {
+        usernames,
+        selectedUsername: normalizeText(preferredUsername),
+        onlinePlayers: [],
+        presenceSource: null,
+      },
+    };
+  }
+
+  const presenceResult = await fetchOnlinePlayersViaSsh();
+  if (!presenceResult.ok) {
+    return {
+      ok: false,
+      status: 502,
+      error: 'Unable to verify in-game online status right now. Please try again in a moment.',
+      details: {
+        usernames,
+        selectedUsername,
+        onlinePlayers: [],
+        presenceError: presenceResult.error || null,
+        presenceSource: presenceResult.source || null,
+      },
+    };
+  }
+
+  const onlineSelection = resolveOnlineUsername(usernames, presenceResult.players, selectedUsername);
+  if (!onlineSelection.username) {
+    const reason = onlineSelection.reason === 'preferred_username_not_allowed'
+      ? 'Selected username is not linked to your account.'
+      : onlineSelection.reason === 'preferred_username_offline'
+        ? `Username "${selectedUsername}" is not online in-game.`
+        : 'None of your linked usernames are currently online in-game.';
+
+    return {
+      ok: false,
+      status: 409,
+      error: `${reason} Please login to the game first, then create QRIS payment.`,
+      details: {
+        usernames,
+        selectedUsername,
+        onlinePlayers: presenceResult.players || [],
+        presenceSource: presenceResult.source || null,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    error: null,
+    details: {
+      usernames,
+      selectedUsername,
+      onlinePlayers: presenceResult.players || [],
+      presenceSource: presenceResult.source || null,
+      resolvedUsername: onlineSelection.username,
+    },
+  };
+}
+
 async function creditTopupIfNeeded(topupId, source = 'unknown') {
   let topup = await RaidPointTopup.findByPk(topupId);
   if (!topup) return { ok: false, reason: 'not_found' };
@@ -397,18 +544,18 @@ async function creditTopupIfNeeded(topupId, source = 'unknown') {
     }
 
     const targetUsername = onlineSelection.username;
-    const targetArg = formatClientExeUsernameArg(targetUsername);
-    if (!targetArg) {
-      throw new Error('Resolved username is invalid for client executor dispatch.');
-    }
-
     const amount = Number(topup.raidPoints || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw new Error('Raid point amount is invalid.');
     }
 
-    const command = `luacmd clientexe ${targetArg} depositraidpoints ${targetArg} ${amount}`;
-    const rconResponse = await sendRconCommand(command);
+    const dispatchResult = await sendDepositRaidPointsWithRetry({
+      username: targetUsername,
+      amount,
+      source,
+      topupId: topup.id,
+    });
+
     await RaidPointTopup.update(
       {
         creditStatus: 'success',
@@ -424,7 +571,9 @@ async function creditTopupIfNeeded(topupId, source = 'unknown') {
       username: targetUsername,
       raidPoints: topup.raidPoints,
       source,
-      rconResponsePreview: String(rconResponse || '').slice(0, 260),
+      dispatchAttempt: dispatchResult.attempt,
+      dispatchMaxAttempts: dispatchResult.maxAttempts,
+      rconResponsePreview: String(dispatchResult.response || '').slice(0, 260),
     });
   } catch (error) {
     await RaidPointTopup.update(
@@ -514,6 +663,7 @@ router.get('/', (_req, res) => {
     ok: true,
     routes: {
       topups: [
+        'POST /online-validation',
         'POST /topups',
         'GET /topups/:id?refresh=true',
         'POST /topups/:id/cancel',
@@ -525,6 +675,52 @@ router.get('/', (_req, res) => {
   });
 });
 
+router.post('/online-validation', requireAuthBearer, async (req, res) => {
+  try {
+    const user = await findAuthenticatedUser(req);
+    const preferredUsername = normalizeText(req.body?.username);
+    const eligibility = await evaluateOnlineEligibility({
+      user,
+      preferredUsername,
+    });
+
+    if (!eligibility.ok) {
+      return res.status(eligibility.status).json({
+        ok: false,
+        valid: false,
+        error: eligibility.error,
+        details: eligibility.details,
+        checkedAt: new Date().toISOString(),
+      });
+    }
+
+    return res.json({
+      ok: true,
+      valid: true,
+      checkedAt: new Date().toISOString(),
+      username: eligibility.details.resolvedUsername,
+      usernames: eligibility.details.usernames,
+      onlinePlayers: eligibility.details.onlinePlayers,
+      presenceSource: eligibility.details.presenceSource,
+    });
+  } catch (error) {
+    const statusCode = Number(error?.status) || 500;
+    logger.error('raid-point online validation failed', {
+      statusCode,
+      userId: req.authUser?.id || null,
+      error: error.message,
+      stack: error.stack,
+    });
+    return res.status(statusCode).json({
+      ok: false,
+      valid: false,
+      error: error.message,
+      details: error?.payload || null,
+      checkedAt: new Date().toISOString(),
+    });
+  }
+});
+
 router.post('/topups', requireAuthBearer, async (req, res) => {
   try {
     const user = await findAuthenticatedUser(req);
@@ -532,49 +728,14 @@ router.post('/topups', requireAuthBearer, async (req, res) => {
     const idrPerRaidPoint = resolveIdrRate();
     const amount = raidPoints * idrPerRaidPoint;
 
-    const usernames = resolveAuthUsernames(user);
-    if (!usernames.length) {
-      throw createHttpError('No whitelist username linked to your account.', 400);
+    const eligibility = await evaluateOnlineEligibility({
+      user,
+      preferredUsername: req.body?.username,
+    });
+    if (!eligibility.ok) {
+      throw createHttpError(eligibility.error, eligibility.status, eligibility.details);
     }
-
-    const selectedUsername = resolveSelectedUsername(usernames, req.body?.username);
-    if (!selectedUsername) {
-      throw createHttpError('Selected username is not linked to your account.', 400);
-    }
-
-    const presenceResult = await fetchOnlinePlayersViaSsh();
-    if (!presenceResult.ok) {
-      throw createHttpError(
-        'Unable to verify in-game online status right now. Please try again in a moment.',
-        502,
-        {
-          presenceError: presenceResult.error || null,
-          presenceSource: presenceResult.source || null,
-        }
-      );
-    }
-
-    const onlineSelection = resolveOnlineUsername(usernames, presenceResult.players, selectedUsername);
-    if (!onlineSelection.username) {
-      const reason = onlineSelection.reason === 'preferred_username_not_allowed'
-        ? 'Selected username is not linked to your account.'
-        : onlineSelection.reason === 'preferred_username_offline'
-          ? `Username "${selectedUsername}" is not online in-game.`
-          : 'None of your linked usernames are currently online in-game.';
-
-      throw createHttpError(
-        `${reason} Please login to the game first, then create QRIS payment.`,
-        409,
-        {
-          usernames,
-          selectedUsername,
-          onlinePlayers: presenceResult.players || [],
-          presenceSource: presenceResult.source || null,
-        }
-      );
-    }
-
-    const resolvedUsername = onlineSelection.username;
+    const resolvedUsername = eligibility.details.resolvedUsername;
 
     const gatewayResponse = await autogopayPost('/qris/generate', { amount });
     const gatewayData = gatewayResponse?.data && typeof gatewayResponse.data === 'object'
