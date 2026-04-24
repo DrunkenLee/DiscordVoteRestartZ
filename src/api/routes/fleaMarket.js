@@ -37,6 +37,7 @@ const FLEA_WEB_BUY_CALLBACK_URL = normalizeText(process.env.FLEA_MARKET_WEB_BUY_
 const FLEA_WEB_BUY_TIMEOUT_MS = resolveWebBuyTimeoutMs();
 const pendingWebBuyRequests = new Map();
 const inFlightWebBuyByUserListing = new Map();
+const inFlightWebCancelByUserListing = new Map();
 
 const fleaMarketCacheSftp = new SftpLogReader();
 
@@ -267,6 +268,10 @@ function resolveOnlineUsername(candidates, onlinePlayers, preferredUsername = nu
 
 function generateWebBuyRequestId() {
   return `fmbuy_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function generateWebCancelRequestId() {
+  return `fmcancel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function createPendingWebBuyRequest(meta) {
@@ -527,6 +532,7 @@ router.get('/', async (_req, res) => {
         'GET /listings/:id',
         'POST /sell',
         'POST /buy',
+        'POST /cancel',
         'POST /web-buy-callback',
         'POST /listings',
         'PUT /listings/:id',
@@ -876,6 +882,217 @@ router.post('/buy', requireAuthBearer, async (req, res) => {
   }
 });
 
+router.post('/cancel', requireAuthBearer, async (req, res) => {
+  try {
+    const userId = Number(req.authUser?.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(401).json({ error: 'Invalid auth user id.' });
+    }
+
+    const user = await ZMUser.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Authenticated user does not exist.' });
+    }
+
+    const listingId = parseInteger(req.body?.listingId, 'listingId', { allowNull: false, min: 1 });
+    const preferredUsername = normalizeText(req.body?.username);
+
+    const usernames = resolveAuthUsernames(user);
+    if (!usernames.length) {
+      return res.status(400).json({ error: 'No whitelist username linked to your account.' });
+    }
+
+    const listing = await FleaMarketListing.findByPk(listingId);
+    if (!listing) {
+      return res.status(404).json({ error: 'Listing not found.', listingId });
+    }
+
+    const sellerUsername = normalizeText(listing.seller);
+    if (!sellerUsername) {
+      return res.status(409).json({
+        error: 'Listing owner is invalid.',
+        listingId,
+      });
+    }
+
+    const ownsListing = usernames.some((name) => name.toLowerCase() === sellerUsername.toLowerCase());
+    if (!ownsListing) {
+      return res.status(403).json({
+        error: 'Only the listing owner can cancel this listing.',
+        listingId,
+      });
+    }
+
+    if (preferredUsername && preferredUsername.toLowerCase() !== sellerUsername.toLowerCase()) {
+      return res.status(409).json({
+        error: 'Use the listing owner username to cancel this listing.',
+        listingId,
+        seller: sellerUsername,
+        requestedUsername: preferredUsername,
+      });
+    }
+
+    const listingQty = Number(listing.qty || 0);
+    if (normalizeText(listing.status)?.toLowerCase() !== 'active' || listingQty <= 0) {
+      return res.status(409).json({
+        error: 'Listing cannot be cancelled because it is not active.',
+        listingId,
+        status: listing.status || null,
+      });
+    }
+
+    const inFlightKey = `${userId}:${listingId}`;
+    const existingInFlight = inFlightWebCancelByUserListing.get(inFlightKey);
+    if (existingInFlight) {
+      const ageMs = Date.now() - Number(existingInFlight.startedAt || 0);
+      if (Number.isFinite(ageMs) && ageMs < (FLEA_WEB_BUY_TIMEOUT_MS + 15000)) {
+        return res.status(429).json({
+          error: 'A cancel request for this listing is already being processed. Please wait.',
+          listingId,
+        });
+      }
+      inFlightWebCancelByUserListing.delete(inFlightKey);
+    }
+
+    inFlightWebCancelByUserListing.set(inFlightKey, { startedAt: Date.now() });
+
+    try {
+      const presenceResult = await fetchOnlinePlayersViaSsh();
+      if (!presenceResult.ok) {
+        return res.status(502).json({
+          error: presenceResult.error || 'Failed to verify in-game online status.',
+        });
+      }
+
+      const onlineSelection = resolveOnlineUsername(
+        [sellerUsername],
+        presenceResult.players,
+        sellerUsername
+      );
+      if (!onlineSelection.username) {
+        return res.status(409).json({
+          error: 'Listing owner must be online in-game before canceling from website.',
+          usernames,
+          onlinePlayers: presenceResult.players || [],
+          seller: sellerUsername,
+        });
+      }
+
+      const resolvedUsername = onlineSelection.username;
+      const requestId = generateWebCancelRequestId();
+      const callbackUrl = FLEA_WEB_BUY_CALLBACK_URL;
+      const targetArg = formatClientExeUsernameArg(resolvedUsername);
+      if (!targetArg) {
+        return res.status(400).json({ error: 'Resolved username is invalid for client executor dispatch.' });
+      }
+
+      const command = `luacmd clientexe ${targetArg} webfm_cancel_listing ${quoteRconArg(requestId)} ${listingId} ${quoteRconArg(callbackUrl)}`;
+      const waitForCallback = createPendingWebBuyRequest({
+        requestId,
+        listingId,
+        qty: listingQty,
+        username: resolvedUsername,
+        userId,
+        action: 'cancel',
+      });
+
+      try {
+        const rconResponse = await sendRconCommand(command);
+        logger.info('flea-market cancel dispatched via clientexe', {
+          ...requestContext(req),
+          requestId,
+          listingId,
+          username: resolvedUsername,
+          callbackUrl,
+          commandPreview: command.slice(0, 280),
+          rconResponsePreview: String(rconResponse || '').slice(0, 280),
+        });
+      } catch (dispatchError) {
+        rejectPendingWebBuyRequest(requestId, dispatchError);
+        await waitForCallback.catch(() => {});
+
+        logger.error('flea-market cancel dispatch failed', {
+          ...requestContext(req),
+          requestId,
+          listingId,
+          username: resolvedUsername,
+          error: dispatchError.message,
+          stack: dispatchError.stack,
+        });
+        return res.status(502).json({
+          error: `Failed to dispatch cancel command to game server: ${dispatchError.message}`,
+          requestId,
+        });
+      }
+
+      let callbackResult = null;
+      try {
+        callbackResult = await waitForCallback;
+      } catch (waitError) {
+        logger.warn('flea-market cancel callback timeout', {
+          ...requestContext(req),
+          requestId,
+          listingId,
+          username: resolvedUsername,
+          timeoutMs: FLEA_WEB_BUY_TIMEOUT_MS,
+          error: waitError.message,
+        });
+        return res.status(504).json({
+          error: 'Timed out waiting for in-game cancel validation callback.',
+          requestId,
+          listingId,
+          username: resolvedUsername,
+          timeoutMs: FLEA_WEB_BUY_TIMEOUT_MS,
+        });
+      }
+
+      const message = normalizeText(callbackResult?.message) || 'cancel_result_received';
+      const ok = callbackResult?.ok === true;
+      const statusCode = ok
+        ? 200
+        : (
+          message === 'buy_throttled'
+          || message === 'sell_throttled'
+          || message === 'request_throttled'
+            ? 429
+            : 409
+        );
+
+      logger.info('flea-market cancel completed', {
+        ...requestContext(req),
+        requestId,
+        listingId,
+        username: resolvedUsername,
+        ok,
+        message,
+        callbackDataKeys: Object.keys(callbackResult?.data || {}),
+      });
+
+      return res.status(statusCode).json({
+        ok,
+        requestId,
+        listingId,
+        username: resolvedUsername,
+        message,
+        data: callbackResult?.data || {},
+        completedAt: callbackResult?.completedAt || new Date().toISOString(),
+        callbackSource: callbackResult?.source || 'ingame_callback',
+      });
+    } finally {
+      inFlightWebCancelByUserListing.delete(inFlightKey);
+    }
+  } catch (err) {
+    const statusCode = /required|must be/.test(err.message) ? 400 : 500;
+    logger.error('flea-market cancel failed', {
+      ...requestContext(req),
+      error: err.message,
+      body: summarizeBody(req.body),
+      stack: err.stack
+    });
+    return res.status(statusCode).json({ error: err.message });
+  }
+});
+
 router.post('/web-buy-callback', async (req, res) => {
   try {
     const requestId = normalizeText(req.body?.requestId || req.body?.data?.webRequestId);
@@ -914,7 +1131,9 @@ router.post('/web-buy-callback', async (req, res) => {
     const callbackMessage = normalizeText(req.body?.message || callbackData.message) || 'buy_callback_received';
     let callbackOk = normalizeBoolean(req.body?.ok);
     if (callbackOk === undefined || callbackOk === null) {
-      callbackOk = callbackMessage.toLowerCase() === 'listing_bought';
+      const callbackMessageToken = callbackMessage.toLowerCase();
+      callbackOk = callbackMessageToken === 'listing_bought'
+        || callbackMessageToken === 'listing_cancelled';
     }
 
     const callbackListingId = parseInteger(
