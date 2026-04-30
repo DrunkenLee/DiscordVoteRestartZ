@@ -13,6 +13,7 @@ import mapRouter from './api/routes/map.js';
 import userDetailsRouter from './api/routes/userDetails.js';
 import adminClockSessionsRouter from './api/routes/adminClockSessions.js';
 import raidPointsRouter from './api/routes/raidPoints.js';
+import serverLogsRouter from './api/routes/serverLogs.js';
 import path from 'path';
 import { AuctionLogMonitor } from './services/auctionLogMonitor.js';
 import { NodeApiQueueProcessor } from './services/nodeApiQueueProcessor.js';
@@ -98,6 +99,7 @@ async function main() {
   app.use('/api/user-details', userDetailsRouter);
   app.use('/api/admin-clock', adminClockSessionsRouter);
   app.use('/api/raid-points', raidPointsRouter);
+  app.use('/api/server-logs', serverLogsRouter);
 
   // Legacy (non-prefixed) routes for backward compatibility
   app.use('/zmusers', zmusersRouter);
@@ -109,6 +111,7 @@ async function main() {
   app.use('/user-details', userDetailsRouter);
   app.use('/admin-clock', adminClockSessionsRouter);
   app.use('/raid-points', raidPointsRouter);
+  app.use('/server-logs', serverLogsRouter);
 
   // Serve static map assets (if present)
   const pzmapStatic = path.resolve(process.cwd(), 'public', 'pzmap');
