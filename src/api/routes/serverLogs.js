@@ -8,6 +8,31 @@ import logger from '../../utils/logger.js';
 const router = express.Router();
 
 const LOGS_DIR = '/home/pzserver/Zomboid/Logs';
+const SPECIAL_LUA_LOG_FILES = [
+  {
+    name: 'FishingShopTransactions.log',
+    displayName: 'Fish Selling Log',
+    remotePath: '/home/pzserver/Zomboid/Lua/FishingShopTransactions.log',
+  },
+  {
+    name: 'JewelryShopTransactions.log',
+    displayName: 'Jewel Selling Log',
+    remotePath: '/home/pzserver/Zomboid/Lua/JewelryShopTransactions.log',
+  },
+  {
+    name: 'ZMLuckyDraw.log',
+    displayName: 'LuckyDraw Log',
+    remotePath: '/home/pzserver/Zomboid/Lua/ZMLuckyDraw.log',
+  },
+  {
+    name: 'ServerPointxInfuseTicket.log',
+    displayName: 'Ticket Infuse Log',
+    remotePath: '/home/pzserver/Zomboid/Lua/ServerPointxInfuseTicket.log',
+  },
+];
+const SPECIAL_LUA_LOGS_BY_NAME = new Map(
+  SPECIAL_LUA_LOG_FILES.map((entry) => [String(entry.name || '').toLowerCase(), entry]),
+);
 const parsedMaxListResults = Number.parseInt(process.env.SERVER_LOGS_MAX_LIST_RESULTS || '500', 10);
 const MAX_LIST_RESULTS = Number.isInteger(parsedMaxListResults) && parsedMaxListResults > 0
   ? parsedMaxListResults
@@ -24,15 +49,25 @@ const normalizeListLimit = (value) => {
   return Math.min(parsed, MAX_LIST_RESULTS);
 };
 
+const toIsoTimestamp = (value) => {
+  const epoch = Number(value) || 0;
+  if (!Number.isFinite(epoch) || epoch <= 0) return null;
+  const epochMs = epoch < 1000000000000 ? epoch * 1000 : epoch;
+  const date = new Date(epochMs);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
 const toPublicFileEntry = (entry) => {
   const sizeBytes = Number(entry?.size) || 0;
-  const modifiedAtMs = Number(entry?.modifyTime) || 0;
-  const modifiedAtIso = modifiedAtMs > 0 ? new Date(modifiedAtMs).toISOString() : null;
 
   return {
     name: String(entry?.name || ''),
+    displayName: String(entry?.name || ''),
     sizeBytes,
-    modifiedAt: modifiedAtIso,
+    modifiedAt: toIsoTimestamp(entry?.modifyTime),
+    exists: true,
+    isSpecialLuaLog: false,
+    missingReason: null,
   };
 };
 
@@ -42,6 +77,55 @@ const isSafeLogFileName = (fileName) => {
   if (value.includes('/') || value.includes('\\')) return false;
   if (value.includes('\0')) return false;
   return value === path.posix.basename(value);
+};
+
+const isMissingSftpError = (error) => /no such file|not found|does not exist/i.test(String(error?.message || ''));
+
+const resolveFileTargetByName = (fileName) => {
+  const key = normalizeText(fileName).toLowerCase();
+  const special = SPECIAL_LUA_LOGS_BY_NAME.get(key);
+  if (special) {
+    return {
+      name: special.name,
+      displayName: special.displayName,
+      remotePath: special.remotePath,
+      isSpecialLuaLog: true,
+    };
+  }
+
+  return {
+    name: normalizeText(fileName),
+    displayName: normalizeText(fileName),
+    remotePath: path.posix.join(LOGS_DIR, normalizeText(fileName)),
+    isSpecialLuaLog: false,
+  };
+};
+
+const toSpecialLuaFileEntryFromStat = (target, stat) => {
+  const isDirectory = typeof stat?.isDirectory === 'function'
+    ? stat.isDirectory()
+    : Boolean(stat?.isDirectory);
+  if (!stat || isDirectory) {
+    return {
+      name: target.name,
+      displayName: target.displayName,
+      sizeBytes: 0,
+      modifiedAt: null,
+      exists: false,
+      isSpecialLuaLog: true,
+      missingReason: 'Path is not a file.',
+    };
+  }
+
+  return {
+    name: target.name,
+    displayName: target.displayName,
+    sizeBytes: Number(stat.size) || 0,
+    modifiedAt: toIsoTimestamp(stat.modifyTime ?? stat.mtime ?? stat.modify),
+    exists: true,
+    isSpecialLuaLog: true,
+    missingReason: null,
+  };
 };
 
 const attachAuthUserRecord = async (req, res, next) => {
@@ -83,17 +167,60 @@ router.get(
       await sftp.connect();
       const listing = await sftp.sftp.list(LOGS_DIR);
 
-      const sortedFiles = listing
+      const sortedRegularFiles = listing
         .filter((entry) => entry?.type === '-')
-        .sort((left, right) => (Number(right?.modifyTime) || 0) - (Number(left?.modifyTime) || 0));
-      const files = listLimit
-        ? sortedFiles.slice(0, listLimit).map(toPublicFileEntry)
-        : sortedFiles.map(toPublicFileEntry);
+        .sort((left, right) => (Number(right?.modifyTime) || 0) - (Number(left?.modifyTime) || 0))
+        .map(toPublicFileEntry);
+
+      const limitedRegularFiles = listLimit
+        ? sortedRegularFiles.slice(0, listLimit)
+        : sortedRegularFiles;
+
+      const specialLuaFiles = [];
+      for (const special of SPECIAL_LUA_LOG_FILES) {
+        try {
+          const stat = await sftp.sftp.stat(special.remotePath);
+          specialLuaFiles.push(
+            toSpecialLuaFileEntryFromStat(
+              {
+                name: special.name,
+                displayName: special.displayName,
+                remotePath: special.remotePath,
+                isSpecialLuaLog: true,
+              },
+              stat,
+            ),
+          );
+        } catch (statError) {
+          if (isMissingSftpError(statError)) {
+            specialLuaFiles.push({
+              name: special.name,
+              displayName: special.displayName,
+              sizeBytes: 0,
+              modifiedAt: null,
+              exists: false,
+              isSpecialLuaLog: true,
+              missingReason: 'File is not created yet.',
+            });
+            continue;
+          }
+          throw statError;
+        }
+      }
+
+      const files = [...limitedRegularFiles, ...specialLuaFiles]
+        .sort((left, right) => {
+          const leftTs = left?.modifiedAt ? new Date(left.modifiedAt).getTime() : 0;
+          const rightTs = right?.modifiedAt ? new Date(right.modifiedAt).getTime() : 0;
+          return (rightTs || 0) - (leftTs || 0);
+        });
 
       return res.json({
         ok: true,
         logDir: LOGS_DIR,
         count: files.length,
+        regularLogCount: limitedRegularFiles.length,
+        specialLuaLogCount: specialLuaFiles.length,
         maxResults: MAX_LIST_RESULTS,
         appliedLimit: listLimit,
         files,
@@ -122,7 +249,8 @@ router.get(
       return res.status(400).json({ error: 'Invalid file name.' });
     }
 
-    const remotePath = path.posix.join(LOGS_DIR, requestedFileName);
+    const target = resolveFileTargetByName(requestedFileName);
+    const remotePath = target.remotePath;
     const sftp = new SftpLogReader();
 
     try {
@@ -132,7 +260,11 @@ router.get(
         ? stat.isDirectory()
         : Boolean(stat?.isDirectory);
       if (!stat || isDirectory) {
-        return res.status(404).json({ error: 'Log file not found.' });
+        return res.status(404).json({
+          error: target.isSpecialLuaLog
+            ? `${target.displayName} is not available yet (file not created).`
+            : 'Log file not found.',
+        });
       }
 
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -148,14 +280,22 @@ router.get(
         return undefined;
       }
 
-      const statusCode = /no such file|not found/i.test(error.message) ? 404 : 500;
+      const statusCode = isMissingSftpError(error) ? 404 : 500;
       logger.error('[server-logs] download file failed', {
         userId: req.authZmUser?.id ?? null,
         fileName: requestedFileName,
+        remotePath,
         error: error.message,
         stack: error.stack,
       });
-      return res.status(statusCode).json({ error: `Failed to download log file: ${error.message}` });
+      if (statusCode === 404) {
+        return res.status(404).json({
+          error: target.isSpecialLuaLog
+            ? `${target.displayName} is not available yet (file not created).`
+            : 'Log file not found.',
+        });
+      }
+      return res.status(500).json({ error: `Failed to download log file: ${error.message}` });
     } finally {
       await sftp.disconnect();
     }
