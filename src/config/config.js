@@ -45,7 +45,7 @@ const config = {
     model: process.env.AI_MODEL || "gpt-3.5-turbo",
     maxTokens: parseInt(process.env.AI_MAX_TOKENS) || 150,
     temperature: parseFloat(process.env.AI_TEMPERATURE) || 0.7,
-    enabled: process.env.AI_ENABLED === "true" || false
+    enabled: false
   },
   get(path) {
     const parts = path.split('.');
