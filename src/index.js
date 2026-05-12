@@ -26,7 +26,10 @@ async function main() {
     'http://127.0.0.1:5173',
     'https://zonamerahwebsite.web.app',
     'https://zonamerahwebsite.firebaseapp.com',
+    'https://zonamerah.pro',
+    'https://www.zonamerah.pro',
     'https://dev.zonamerah.pro',
+    'https://*.zonamerah.pro',
   ];
   const configuredAllowedOrigins = String(process.env.CORS_ALLOWED_ORIGINS ?? '')
     .split(',')
@@ -61,6 +64,13 @@ async function main() {
   const corsOptionsDelegate = (req, callback) => {
     const requestOrigin = req.get('Origin') || '';
     const originAllowed = isOriginAllowed(requestOrigin);
+    if (requestOrigin && !originAllowed) {
+      logger.warn('cors blocked origin', {
+        origin: requestOrigin,
+        method: req.method,
+        path: req.originalUrl || req.url,
+      });
+    }
 
     callback(null, {
       origin: originAllowed && requestOrigin ? requestOrigin : false,
