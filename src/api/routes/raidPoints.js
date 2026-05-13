@@ -10,7 +10,7 @@ import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
-const DEFAULT_AUTOGOPAY_BASE_URL = 'https://api-gopay.sawargipay.cloud';
+const DEFAULT_AUTOGOPAY_BASE_URL = 'https://v1-gateway.autogopay.site';
 const DEFAULT_IDR_PER_RAID_POINT = 2000;
 const DEFAULT_AUTOGOPAY_TIMEOUT_MS = 12000;
 const DEFAULT_CREDIT_MAX_ATTEMPTS = 2;
@@ -345,7 +345,19 @@ async function autogopayPost(endpointPath, body) {
       },
       body: body ? JSON.stringify(body) : '{}',
       signal: controller.signal,
+      redirect: 'manual',
     });
+
+    if (response.status >= 300 && response.status < 400) {
+      const redirectedTo = normalizeText(response.headers.get('location'));
+      const redirectMessage = redirectedTo
+        ? `AutoGoPay endpoint redirected (${response.status}) to ${redirectedTo}. Check AUTOGOPAY_BASE_URL.`
+        : `AutoGoPay endpoint redirected (${response.status}). Check AUTOGOPAY_BASE_URL.`;
+      throw createHttpError(redirectMessage, 502, {
+        status: response.status,
+        location: redirectedTo,
+      });
+    }
 
     const text = await response.text();
     let payload = {};
