@@ -26,8 +26,10 @@ async function main() {
     'http://127.0.0.1:5173',
     'https://zonamerahwebsite.web.app',
     'https://*.zonamerahwebsite.web.app',
+    'https://zonamerahwebsite--*.web.app',
     'https://zonamerahwebsite.firebaseapp.com',
     'https://*.zonamerahwebsite.firebaseapp.com',
+    'https://zonamerahwebsite--*.firebaseapp.com',
     'https://zonamerah.pro',
     'https://www.zonamerah.pro',
     'https://dev.zonamerah.pro',
@@ -40,23 +42,19 @@ async function main() {
   const allowedOrigins = new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredAllowedOrigins]);
   const allowAnyOrigin = allowedOrigins.has('*');
   const wildcardOrigins = [...allowedOrigins].filter((origin) => origin.includes('*'));
+  const wildcardOriginRegexes = wildcardOrigins.map((originPattern) => {
+    const escaped = originPattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+    const regexBody = escaped.replace(/\*/g, '[^/]*');
+    return new RegExp(`^${regexBody}$`, 'i');
+  });
 
   const isOriginAllowed = (origin) => {
     if (!origin) return true; // non-browser requests may not send Origin
     if (allowAnyOrigin || allowedOrigins.has(origin)) return true;
 
-    for (const wildcardOrigin of wildcardOrigins) {
-      const match = wildcardOrigin.match(/^(https?:\/\/)\*\.(.+)$/i);
-      if (!match) continue;
-
-      const [, protocol, domain] = match;
-      try {
-        const parsed = new URL(origin);
-        if (parsed.protocol === protocol && parsed.hostname.endsWith(`.${domain}`)) {
-          return true;
-        }
-      } catch {
-        return false;
+    for (const wildcardRegex of wildcardOriginRegexes) {
+      if (wildcardRegex.test(origin)) {
+        return true;
       }
     }
 
