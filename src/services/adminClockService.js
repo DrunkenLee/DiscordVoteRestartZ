@@ -12,6 +12,35 @@ const toPositiveInt = (value, fallback) => {
 
 const normalizeText = (value) => String(value ?? '').trim();
 
+const LEGACY_SESSION_ATTRIBUTES = [
+  'id',
+  'discordUserId',
+  'discordUsername',
+  'discordDisplayName',
+  'guildId',
+  'clockInChannelId',
+  'clockOutChannelId',
+  'workDate',
+  'clockInAt',
+  'clockOutAt',
+  'durationMinutes',
+  'createdAt',
+  'updatedAt',
+];
+
+const isMissingColumnError = (error) => {
+  const message = String(
+    error?.original?.message
+      || error?.parent?.message
+      || error?.message
+      || '',
+  ).toLowerCase();
+
+  return error?.name === 'SequelizeDatabaseError'
+    && message.includes('column')
+    && message.includes('does not exist');
+};
+
 export const getAdminClockPolicy = () => {
   const confirmIntervalMs = toPositiveInt(
     process.env.ADMIN_CLOCK_CONFIRM_INTERVAL_MS,
@@ -51,19 +80,49 @@ export const buildNextConfirmationDueAt = (fromTime = new Date()) => {
 };
 
 export const getOpenSessionByDiscordUserId = async (discordUserId) =>
-  AdminClockSession.findOne({
-    where: {
+  {
+    const where = {
       discordUserId: normalizeText(discordUserId),
       clockOutAt: null,
-    },
-    order: [['clockInAt', 'DESC']],
-  });
+    };
+
+    try {
+      return await AdminClockSession.findOne({
+        where,
+        order: [['clockInAt', 'DESC']],
+      });
+    } catch (error) {
+      if (!isMissingColumnError(error)) {
+        throw error;
+      }
+
+      return AdminClockSession.findOne({
+        attributes: LEGACY_SESSION_ATTRIBUTES,
+        where,
+        order: [['clockInAt', 'DESC']],
+      });
+    }
+  };
 
 export const getOpenAdminClockSessions = async () =>
-  AdminClockSession.findAll({
-    where: { clockOutAt: null },
-    order: [['clockInAt', 'ASC']],
-  });
+  {
+    try {
+      return await AdminClockSession.findAll({
+        where: { clockOutAt: null },
+        order: [['clockInAt', 'ASC']],
+      });
+    } catch (error) {
+      if (!isMissingColumnError(error)) {
+        throw error;
+      }
+
+      return AdminClockSession.findAll({
+        attributes: LEGACY_SESSION_ATTRIBUTES,
+        where: { clockOutAt: null },
+        order: [['clockInAt', 'ASC']],
+      });
+    }
+  };
 
 export const createClockInSession = async ({
   discordUserId,
@@ -84,23 +143,35 @@ export const createClockInSession = async ({
   }
 
   const now = new Date();
+  const fullPayload = {
+    discordUserId: normalizedDiscordUserId,
+    discordUsername: normalizeText(discordUsername) || null,
+    discordDisplayName: normalizeText(discordDisplayName) || null,
+    guildId: normalizeText(guildId) || null,
+    clockInChannelId: normalizeText(clockInChannelId) || null,
+    workDate: getJakartaDateOnly(now),
+    clockInAt: now,
+    lastConfirmationAt: now,
+    nextConfirmationDueAt: buildNextConfirmationDueAt(now),
+    lastConfirmationSource: normalizeText(source) || null,
+    confirmationReminderSentAt: null,
+    autoClockedOut: false,
+    autoClockOutReason: null,
+    autoClockOutBy: null,
+  };
+
+  const legacyPayload = {
+    discordUserId: fullPayload.discordUserId,
+    discordUsername: fullPayload.discordUsername,
+    discordDisplayName: fullPayload.discordDisplayName,
+    guildId: fullPayload.guildId,
+    clockInChannelId: fullPayload.clockInChannelId,
+    workDate: fullPayload.workDate,
+    clockInAt: fullPayload.clockInAt,
+  };
+
   try {
-    const session = await AdminClockSession.create({
-      discordUserId: normalizedDiscordUserId,
-      discordUsername: normalizeText(discordUsername) || null,
-      discordDisplayName: normalizeText(discordDisplayName) || null,
-      guildId: normalizeText(guildId) || null,
-      clockInChannelId: normalizeText(clockInChannelId) || null,
-      workDate: getJakartaDateOnly(now),
-      clockInAt: now,
-      lastConfirmationAt: now,
-      nextConfirmationDueAt: buildNextConfirmationDueAt(now),
-      lastConfirmationSource: normalizeText(source) || null,
-      confirmationReminderSentAt: null,
-      autoClockedOut: false,
-      autoClockOutReason: null,
-      autoClockOutBy: null,
-    });
+    const session = await AdminClockSession.create(fullPayload);
 
     return { ok: true, session };
   } catch (error) {
@@ -111,6 +182,13 @@ export const createClockInSession = async ({
         return { ok: false, reason: 'already_clocked_in', session: racedOpenSession };
       }
     }
+
+    // Backward compatibility for databases that haven't applied confirmation-field migration yet.
+    if (isMissingColumnError(error)) {
+      const legacySession = await AdminClockSession.create(legacyPayload);
+      return { ok: true, session: legacySession };
+    }
+
     throw error;
   }
 };
@@ -125,7 +203,7 @@ export const closeClockSession = async (openSession, {
 } = {}) => {
   const durationMinutes = computeDurationMinutes(openSession.clockInAt, clockOutAt);
 
-  await openSession.update({
+  const fullUpdate = {
     clockOutAt,
     clockOutChannelId: normalizeText(clockOutChannelId) || null,
     durationMinutes,
@@ -133,7 +211,21 @@ export const closeClockSession = async (openSession, {
     autoClockOutReason: autoClockedOut ? (normalizeText(autoClockOutReason) || 'no_confirmation') : null,
     autoClockOutBy: autoClockedOut ? (normalizeText(autoClockOutBy) || 'system') : null,
     lastConfirmationSource: normalizeText(source) || openSession.lastConfirmationSource || null,
-  });
+  };
+
+  try {
+    await openSession.update(fullUpdate);
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    await openSession.update({
+      clockOutAt,
+      clockOutChannelId: normalizeText(clockOutChannelId) || null,
+      durationMinutes,
+    });
+  }
 
   return {
     session: openSession,
@@ -181,7 +273,25 @@ export const confirmClockSessionByDiscordUserId = async (discordUserId, {
     updates.discordDisplayName = nextDisplayName;
   }
 
-  await openSession.update(updates);
+  try {
+    await openSession.update(updates);
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    const legacyUpdates = {};
+    if (nextUsername) {
+      legacyUpdates.discordUsername = nextUsername;
+    }
+    if (nextDisplayName) {
+      legacyUpdates.discordDisplayName = nextDisplayName;
+    }
+    if (Object.keys(legacyUpdates).length) {
+      await openSession.update(legacyUpdates);
+    }
+  }
+
   return {
     ok: true,
     session: openSession,
@@ -213,7 +323,13 @@ const applyMissingConfirmationDefaults = async (session) => {
   }
 
   if (Object.keys(updates).length) {
-    await session.update(updates);
+    try {
+      await session.update(updates);
+    } catch (error) {
+      if (!isMissingColumnError(error)) {
+        throw error;
+      }
+    }
   }
 
   return {
@@ -235,6 +351,13 @@ export const runAdminClockConfirmationSweep = async ({
   const autoClockedOut = [];
 
   for (const session of sessions) {
+    // Legacy schema fallback: skip confirmation automation when confirmation columns are unavailable.
+    const hasConfirmationColumns = session.nextConfirmationDueAt !== undefined
+      || session.lastConfirmationAt !== undefined;
+    if (!hasConfirmationColumns) {
+      continue;
+    }
+
     const {
       nextConfirmationDueAt,
       confirmationReminderSentAt,
@@ -271,9 +394,15 @@ export const runAdminClockConfirmationSweep = async ({
     }
 
     if (!confirmationReminderSentAt) {
-      await session.update({
-        confirmationReminderSentAt: now,
-      });
+      try {
+        await session.update({
+          confirmationReminderSentAt: now,
+        });
+      } catch (error) {
+        if (!isMissingColumnError(error)) {
+          throw error;
+        }
+      }
 
       const payload = {
         session,
