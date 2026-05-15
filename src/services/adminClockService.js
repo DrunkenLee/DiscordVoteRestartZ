@@ -84,24 +84,35 @@ export const createClockInSession = async ({
   }
 
   const now = new Date();
-  const session = await AdminClockSession.create({
-    discordUserId: normalizedDiscordUserId,
-    discordUsername: normalizeText(discordUsername) || null,
-    discordDisplayName: normalizeText(discordDisplayName) || null,
-    guildId: normalizeText(guildId) || null,
-    clockInChannelId: normalizeText(clockInChannelId) || null,
-    workDate: getJakartaDateOnly(now),
-    clockInAt: now,
-    lastConfirmationAt: now,
-    nextConfirmationDueAt: buildNextConfirmationDueAt(now),
-    lastConfirmationSource: normalizeText(source) || null,
-    confirmationReminderSentAt: null,
-    autoClockedOut: false,
-    autoClockOutReason: null,
-    autoClockOutBy: null,
-  });
+  try {
+    const session = await AdminClockSession.create({
+      discordUserId: normalizedDiscordUserId,
+      discordUsername: normalizeText(discordUsername) || null,
+      discordDisplayName: normalizeText(discordDisplayName) || null,
+      guildId: normalizeText(guildId) || null,
+      clockInChannelId: normalizeText(clockInChannelId) || null,
+      workDate: getJakartaDateOnly(now),
+      clockInAt: now,
+      lastConfirmationAt: now,
+      nextConfirmationDueAt: buildNextConfirmationDueAt(now),
+      lastConfirmationSource: normalizeText(source) || null,
+      confirmationReminderSentAt: null,
+      autoClockedOut: false,
+      autoClockOutReason: null,
+      autoClockOutBy: null,
+    });
 
-  return { ok: true, session };
+    return { ok: true, session };
+  } catch (error) {
+    // Guard against a race between pre-check and insert on the unique open-session index.
+    if (error?.name === 'SequelizeUniqueConstraintError') {
+      const racedOpenSession = await getOpenSessionByDiscordUserId(normalizedDiscordUserId);
+      if (racedOpenSession) {
+        return { ok: false, reason: 'already_clocked_in', session: racedOpenSession };
+      }
+    }
+    throw error;
+  }
 };
 
 export const closeClockSession = async (openSession, {
